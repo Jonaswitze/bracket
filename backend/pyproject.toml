@@ -12,6 +12,7 @@ filterwarnings = [
     'ignore:.*:pytest.PytestDeprecationWarning',
     'ignore:.*pytest-asyncio detected an unclosed event loop.*:DeprecationWarning',
     'ignore:.*The event_loop fixture provided by pytest-asyncio has been redefined.*:DeprecationWarning',
+    'ignore:.*Please use `import python_multipart` instead.*:PendingDeprecationWarning',
 ]
 
 [tool.mypy]
@@ -54,6 +55,7 @@ disable = [
     'broad-except',
     'broad-exception-raised',
     'consider-iterating-dictionary',
+    'contextmanager-generator-missing-cleanup',  # Gives false positives.
     'dangerous-default-value',
     'duplicate-code',
     'fixme',
@@ -67,6 +69,7 @@ disable = [
     'too-many-arguments',
     'too-many-locals',
     'too-many-nested-blocks',
+    'too-many-positional-arguments',
     'unspecified-encoding',
     'unused-argument',  # Gives false positives.
     'wrong-import-position',
@@ -109,7 +112,7 @@ select = [
     "UP",
     "W",
 ]
-ignore = ["FIX002", "TD002", "TD003", "TCH001", "TCH002", "TCH003", "ISC001"]
+ignore = ["FIX002", "TD002", "TD003", "TC001", "TC002", "TC003", "ISC001"]
 
 [tool.vulture]
 min_confidence = 0

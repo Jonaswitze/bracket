@@ -20,6 +20,7 @@ export interface ThProps {
   children: React.ReactNode;
   state: TableState;
   field: string;
+  visibleFrom?: string;
 }
 
 export const setSorting = (state: TableState, newSortField: string) => {
@@ -70,14 +71,14 @@ export function getSortIcon(sorted: boolean, reversed: boolean) {
   return <HiSortAscending />;
 }
 
-export function ThSortable({ children, field, state }: ThProps) {
+export function ThSortable({ children, field, visibleFrom, state }: ThProps) {
   const sorted = state.sortField === field;
   const onSort = () => setSorting(state, field);
   return (
-    <Table.Th className={classes.th}>
-      <UnstyledButton onClick={onSort} className={classes.control}>
+    <Table.Th className={classes.th} visibleFrom={visibleFrom}>
+      <UnstyledButton onClick={onSort} className={classes.control} style={{ fontSize: 'inherit' }}>
         <Group justify="apart">
-          <Text fw={800} size="sm" ml="0.5rem" my="0.25rem">
+          <Text fw={800} inherit ml="0.5rem" my="0.25rem">
             {children}
           </Text>
           <Center className={classes.icon}>{getSortIcon(sorted, state.reversed)}</Center>
@@ -87,11 +88,17 @@ export function ThSortable({ children, field, state }: ThProps) {
   );
 }
 
-export function ThNotSortable({ children }: { children: React.ReactNode }) {
+export function ThNotSortable({
+  children,
+  visibleFrom,
+}: {
+  children: React.ReactNode;
+  visibleFrom?: string;
+}) {
   return (
-    <Table.Th className={classes.th}>
+    <Table.Th className={classes.th} visibleFrom={visibleFrom}>
       <Group justify="apart" ml="20px">
-        <Text fw={800} size="sm">
+        <Text fw={800} inherit>
           {children}
         </Text>
       </Group>

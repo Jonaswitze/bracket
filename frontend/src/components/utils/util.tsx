@@ -10,11 +10,6 @@ export function capitalize(str: string) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-export function getItemColor(theme: any) {
-  const darkTheme = theme.colorScheme === 'dark';
-  return darkTheme ? theme.colors.dark[4] : theme.colors.gray[2];
-}
-
 function getTodayAtMidnight() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -41,16 +36,18 @@ export function getDefaultTimeRange(selectMultipleDates: boolean) {
   return [minDate, maxDate];
 }
 
-export function onlyUnique(value: any, index: number, self: any) {
-  return self.indexOf(value) === index;
-}
-
 export function getTournamentIdFromRouter() {
   const router = useRouter();
   const { id: idString }: any = router.query;
   const id = parseInt(idString, 10);
   const tournamentData = { id };
   return { id, tournamentData };
+}
+
+export function getStageItemIdFromRouter() {
+  const router = useRouter();
+  const { stage_item_id: idString }: any = router.query;
+  return parseInt(idString, 10);
 }
 
 export function getTournamentEndpointFromRouter() {

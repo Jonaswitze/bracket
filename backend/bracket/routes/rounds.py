@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from starlette import status
 
 from bracket.database import database
-from bracket.logic.ranking.elo import recalculate_ranking_for_tournament_id
+from bracket.logic.ranking.calculation import (
+    recalculate_ranking_for_stage_item,
+)
 from bracket.logic.subscriptions import check_requirement
 from bracket.models.db.round import (
     Round,
     RoundCreateBody,
-    RoundToInsert,
+    RoundInsertable,
     RoundUpdateBody,
 )
 from bracket.models.db.user import UserPublic
@@ -18,12 +20,18 @@ from bracket.routes.util import (
     round_dependency,
     round_with_matches_dependency,
 )
-from bracket.schema import rounds
-from bracket.sql.rounds import get_next_round_name, set_round_active_or_draft, sql_create_round
+from bracket.sql.matches import sql_delete_match
+from bracket.sql.rounds import (
+    get_next_round_name,
+    set_round_active_or_draft,
+    sql_create_round,
+    sql_delete_round,
+)
 from bracket.sql.stage_items import get_stage_item
 from bracket.sql.stages import get_full_tournament_details
 from bracket.sql.validation import check_foreign_keys_belong_to_tournament
 from bracket.utils.id_types import RoundId, TournamentId
+from tests.integration_tests.mocks import MOCK_NOW
 
 router = APIRouter()
 
@@ -35,18 +43,13 @@ async def delete_round(
     _: UserPublic = Depends(user_authenticated_for_tournament),
     round_with_matches: RoundWithMatches = Depends(round_with_matches_dependency),
 ) -> SuccessResponse:
-    if len(round_with_matches.matches) > 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Round contains matches, delete those first",
-        )
+    for match in round_with_matches.matches:
+        await sql_delete_match(match.id)
 
-    await database.execute(
-        query=rounds.delete().where(
-            rounds.c.id == round_id and rounds.c.tournament_id == tournament_id
-        ),
-    )
-    await recalculate_ranking_for_tournament_id(tournament_id)
+    await sql_delete_round(round_id)
+
+    stage_item = await get_stage_item(tournament_id, round_with_matches.stage_item_id)
+    await recalculate_ranking_for_stage_item(tournament_id, stage_item)
     return SuccessResponse()
 
 
@@ -69,12 +72,6 @@ async def create_round(
 
     stage_item = await get_stage_item(tournament_id, stage_item_id=round_body.stage_item_id)
 
-    if stage_item is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Stage item doesn't exist",
-        )
-
     if not stage_item.type.supports_dynamic_number_of_rounds:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -82,13 +79,15 @@ async def create_round(
         )
 
     round_id = await sql_create_round(
-        RoundToInsert(
+        RoundInsertable(
+            created=MOCK_NOW,
+            is_draft=False,
             stage_item_id=round_body.stage_item_id,
             name=await get_next_round_name(tournament_id, round_body.stage_item_id),
         ),
     )
 
-    await set_round_active_or_draft(round_id, tournament_id, is_active=False, is_draft=True)
+    await set_round_active_or_draft(round_id, tournament_id, is_draft=True)
     return SuccessResponse()
 
 
@@ -100,12 +99,9 @@ async def update_round_by_id(
     _: UserPublic = Depends(user_authenticated_for_tournament),
     __: Round = Depends(round_dependency),
 ) -> SuccessResponse:
-    await set_round_active_or_draft(
-        round_id, tournament_id, is_active=round_body.is_active, is_draft=round_body.is_draft
-    )
     query = """
         UPDATE rounds
-        SET name = :name
+        SET name = :name, is_draft = :is_draft
         WHERE rounds.id IN (
             SELECT rounds.id
             FROM rounds
@@ -117,6 +113,11 @@ async def update_round_by_id(
     """
     await database.execute(
         query=query,
-        values={"tournament_id": tournament_id, "round_id": round_id, "name": round_body.name},
+        values={
+            "tournament_id": tournament_id,
+            "round_id": round_id,
+            "name": round_body.name,
+            "is_draft": round_body.is_draft,
+        },
     )
     return SuccessResponse()

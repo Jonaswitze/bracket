@@ -28,11 +28,12 @@ export function UpdateStageModal({
   });
 
   return (
-    <Modal opened={opened} onClose={() => setOpened(false)} title="Edit stage">
+    <Modal opened={opened} onClose={() => setOpened(false)} title={t('edit_stage_label')}>
       <form
         onSubmit={form.onSubmit(async (values) => {
           await updateStage(tournament.id, stage.id, values.name);
           await swrStagesResponse.mutate();
+          setOpened(false);
         })}
       >
         <TextInput

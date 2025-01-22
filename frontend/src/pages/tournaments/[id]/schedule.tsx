@@ -1,17 +1,35 @@
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
-import { Alert, Badge, Button, Card, Grid, Group, Stack, Text, Title } from '@mantine/core';
-import { IconAlertCircle, IconCalendarPlus } from '@tabler/icons-react';
+import {
+  ActionIcon,
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Grid,
+  Group,
+  Menu,
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core';
+import { AiFillWarning } from '@react-icons/all-files/ai/AiFillWarning';
+import { IconAlertCircle, IconCalendarPlus, IconDots, IconTrash } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
-import React from 'react';
+import React, { useState } from 'react';
+import { SWRResponse } from 'swr';
 
+import CourtModal from '../../../components/modals/create_court_modal';
+import MatchModal from '../../../components/modals/match_modal';
 import { NoContent } from '../../../components/no_content/empty_table_info';
 import { Time } from '../../../components/utils/datetime';
 import { Translator } from '../../../components/utils/types';
 import { getTournamentIdFromRouter, responseIsValid } from '../../../components/utils/util';
 import { Court } from '../../../interfaces/court';
-import { MatchInterface, formatMatchTeam1, formatMatchTeam2 } from '../../../interfaces/match';
+import { MatchInterface, formatMatchInput1, formatMatchInput2 } from '../../../interfaces/match';
+import { TournamentMinimal } from '../../../interfaces/tournament';
 import { getCourts, getStages } from '../../../services/adapter';
+import { deleteCourt } from '../../../services/court';
 import {
   getMatchLookup,
   getMatchLookupByCourt,
@@ -25,16 +43,17 @@ import TournamentLayout from '../_tournament_layout';
 function ScheduleRow({
   index,
   match,
+  openMatchModal,
   stageItemsLookup,
   matchesLookup,
 }: {
   index: number;
   match: MatchInterface;
+  openMatchModal: any;
   stageItemsLookup: any;
   matchesLookup: any;
 }) {
-  const stageItemColor = stringToColour(`${matchesLookup[match.id].stageItem.id}`);
-
+  const { t } = useTranslation();
   return (
     <Draggable key={match.id} index={index} draggableId={`${match.id}`}>
       {(provided) => (
@@ -45,19 +64,35 @@ function ScheduleRow({
             radius="md"
             withBorder
             mt="md"
+            onClick={() => {
+              openMatchModal(match);
+            }}
             {...provided.dragHandleProps}
           >
             <Grid>
               <Grid.Col span="auto">
-                <Text fw={500}>{formatMatchTeam1(stageItemsLookup, matchesLookup, match)}</Text>
-                <Text fw={500}>{formatMatchTeam2(stageItemsLookup, matchesLookup, match)}</Text>
+                <Group gap="xs">
+                  {match.stage_item_input1_conflict && <AiFillWarning color="red" />}
+                  <Text fw={500}>
+                    {formatMatchInput1(t, stageItemsLookup, matchesLookup, match)}
+                  </Text>
+                </Group>
+                <Group gap="xs">
+                  {match.stage_item_input2_conflict && <AiFillWarning color="red" />}
+                  <Text fw={500}>
+                    {formatMatchInput2(t, stageItemsLookup, matchesLookup, match)}
+                  </Text>
+                </Group>
               </Grid.Col>
               <Grid.Col span="content">
-                <Stack gap="xs">
+                <Stack gap="xs" align="end">
                   <Badge variant="default" size="lg">
                     {match.start_time != null ? <Time datetime={match.start_time} /> : null}
                   </Badge>
-                  <Badge color={stageItemColor} variant="outline">
+                  <Badge
+                    color={stringToColour(`${matchesLookup[match.id].stageItem.id}`)}
+                    variant="outline"
+                  >
                     {matchesLookup[match.id].stageItem.name}
                   </Badge>
                 </Stack>
@@ -71,14 +106,20 @@ function ScheduleRow({
 }
 
 function ScheduleColumn({
+  tournamentId,
   court,
   matches,
+  openMatchModal,
   stageItemsLookup,
+  swrCourtsResponse,
   matchesLookup,
 }: {
+  tournamentId: number;
   court: Court;
   matches: MatchInterface[];
+  openMatchModal: any;
   stageItemsLookup: any;
+  swrCourtsResponse: SWRResponse;
   matchesLookup: any;
 }) {
   const { t } = useTranslation();
@@ -88,6 +129,7 @@ function ScheduleColumn({
       stageItemsLookup={stageItemsLookup}
       matchesLookup={matchesLookup}
       match={match}
+      openMatchModal={openMatchModal}
       key={match.id}
     />
   ));
@@ -99,6 +141,7 @@ function ScheduleColumn({
         title={t('no_matches_title')}
         color="gray"
         radius="md"
+        mt="1rem"
       >
         {t('drop_match_alert_title')}
       </Alert>
@@ -108,8 +151,32 @@ function ScheduleColumn({
     <Droppable droppableId={`${court.id}`} direction="vertical">
       {(provided) => (
         <div {...provided.droppableProps} ref={provided.innerRef}>
-          <div style={{ width: '26rem', marginLeft: '0.5rem', marginRight: '0.5rem' }}>
-            <h4>{court.name}</h4>
+          <div style={{ width: '25rem' }}>
+            <Group justify="space-between">
+              <Group>
+                <h4 style={{ marginTop: '0', margin: 'auto' }}>{court.name}</h4>
+              </Group>
+              <Menu withinPortal position="bottom-end" shadow="sm">
+                <Menu.Target>
+                  <ActionIcon variant="transparent" color="gray">
+                    <IconDots size="1.25rem" />
+                  </ActionIcon>
+                </Menu.Target>
+
+                <Menu.Dropdown>
+                  <Menu.Item
+                    leftSection={<IconTrash size="1.5rem" />}
+                    onClick={async () => {
+                      await deleteCourt(tournamentId, court.id);
+                      await swrCourtsResponse.mutate();
+                    }}
+                    color="red"
+                  >
+                    {t('delete_court_button')}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </Group>
             {rows}
             {noItemsAlert}
             {provided.placeholder}
@@ -122,37 +189,70 @@ function ScheduleColumn({
 
 function Schedule({
   t,
+  tournament,
+  swrCourtsResponse,
   stageItemsLookup,
   matchesLookup,
   schedule,
+  openMatchModal,
 }: {
   t: Translator;
+  tournament: TournamentMinimal;
+  swrCourtsResponse: SWRResponse;
   stageItemsLookup: any;
   matchesLookup: any;
   schedule: { court: Court; matches: MatchInterface[] }[];
+  openMatchModal: CallableFunction;
 }) {
   const columns = schedule.map((item) => (
     <ScheduleColumn
+      tournamentId={tournament.id}
+      swrCourtsResponse={swrCourtsResponse}
       stageItemsLookup={stageItemsLookup}
       matchesLookup={matchesLookup}
       key={item.court.id}
       court={item.court}
       matches={item.matches}
+      openMatchModal={openMatchModal}
     />
   ));
 
-  if (columns.length < 1) {
-    return <NoContent title={t('no_matches_title')} description={t('no_matches_description')} />;
+  columns.push(
+    <div style={{ width: '25rem' }}>
+      <CourtModal
+        swrCourtsResponse={swrCourtsResponse}
+        tournamentId={tournament.id}
+        buttonSize="xs"
+      />
+    </div>
+  );
+  if (columns.length < 2) {
+    return (
+      <Stack align="center">
+        <NoContent title={t('no_courts_title')} description={t('no_courts_description')} />
+        <CourtModal
+          swrCourtsResponse={swrCourtsResponse}
+          tournamentId={tournament.id}
+          buttonSize="lg"
+        />
+      </Stack>
+    );
   }
 
-  return <Group align="top">{columns}</Group>;
+  return (
+    <Group wrap="nowrap" align="top">
+      {columns}
+    </Group>
+  );
 }
 
 export default function SchedulePage() {
+  const [modalOpened, modalSetOpened] = useState(false);
+  const [match, setMatch] = useState<MatchInterface | null>(null);
+
   const { t } = useTranslation();
   const { tournamentData } = getTournamentIdFromRouter();
   const swrStagesResponse = getStages(tournamentData.id);
-
   const swrCourtsResponse = getCourts(tournamentData.id);
 
   const stageItemsLookup = responseIsValid(swrStagesResponse)
@@ -171,28 +271,46 @@ export default function SchedulePage() {
   if (!responseIsValid(swrStagesResponse)) return null;
   if (!responseIsValid(swrCourtsResponse)) return null;
 
+  function openMatchModal(matchToOpen: MatchInterface) {
+    setMatch(matchToOpen);
+    modalSetOpened(true);
+  }
+
   return (
     <TournamentLayout tournament_id={tournamentData.id}>
+      {match != null ? (
+        <MatchModal
+          swrStagesResponse={swrStagesResponse}
+          swrUpcomingMatchesResponse={null}
+          tournamentData={tournamentData}
+          match={match}
+          opened={modalOpened}
+          setOpened={modalSetOpened}
+          round={null}
+        />
+      ) : null}
       <Grid grow>
         <Grid.Col span={6}>
-          <Title>{t('schedule_title')}</Title>
+          <Title>{t('planning_title')}</Title>
         </Grid.Col>
         <Grid.Col span={6}>
-          <Group justify="right">
-            <Button
-              color="indigo"
-              size="md"
-              variant="filled"
-              style={{ marginBottom: 10 }}
-              leftSection={<IconCalendarPlus size={24} />}
-              onClick={async () => {
-                await scheduleMatches(tournamentData.id);
-                await swrStagesResponse.mutate();
-              }}
-            >
-              {t('schedule_description')}
-            </Button>
-          </Group>
+          {data.length < 1 ? null : (
+            <Group justify="right">
+              <Button
+                color="indigo"
+                size="md"
+                variant="filled"
+                style={{ marginBottom: 10 }}
+                leftSection={<IconCalendarPlus size={24} />}
+                onClick={async () => {
+                  await scheduleMatches(tournamentData.id);
+                  await swrStagesResponse.mutate();
+                }}
+              >
+                {t('schedule_description')}
+              </Button>
+            </Group>
+          )}
         </Grid.Col>
       </Grid>
       <Group grow mt="1rem">
@@ -210,9 +328,12 @@ export default function SchedulePage() {
         >
           <Schedule
             t={t}
+            tournament={tournamentData}
+            swrCourtsResponse={swrCourtsResponse}
             schedule={data}
             stageItemsLookup={stageItemsLookup}
             matchesLookup={matchesLookup}
+            openMatchModal={openMatchModal}
           />
         </DragDropContext>
       </Group>

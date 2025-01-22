@@ -17,6 +17,15 @@ Several areas that we need a bit of help with at the moment are:
 
 ## Translating
 
+### Adding translations (via crowdin)
+
+Bracket uses [crowdin](https://crowdin.com/project/bracket) for translations. You can add/improve
+translations here in your language.
+
+If you want to add a new language, please create an issue and I will add the language to Crowdin.
+
+### Manually adding translations
+
 You can add a translation by copying the English `en` locale
 ([here](https://github.com/evroon/bracket/tree/master/frontend/public/locales)) directory.
 Rename the directory to the name of your locale, and start translating the `common.json` file inside
@@ -43,10 +52,39 @@ translation for you, and then carefully check and correct any mistakes.
         </a>
     </td>
     <td align="center">
+        <a href="https://github.com/BachErik">
+            <img src="https://avatars.githubusercontent.com/u/75324423?v=4" width="100;" alt="BachErik"/>
+            <br />
+            <sub><b>BachErik</b></sub>
+        </a>
+    </td>
+    <td align="center">
+        <a href="https://github.com/djpiper28">
+            <img src="https://avatars.githubusercontent.com/u/13609136?v=4" width="100;" alt="djpiper28"/>
+            <br />
+            <sub><b>Danny Piper</b></sub>
+        </a>
+    </td>
+    <td align="center">
         <a href="https://github.com/Sevichecc">
             <img src="https://avatars.githubusercontent.com/u/91365763?v=4" width="100;" alt="Sevichecc"/>
             <br />
             <sub><b>SevicheCC</b></sub>
+        </a>
+    </td>
+    <td align="center">
+        <a href="https://github.com/IzStriker">
+            <img src="https://avatars.githubusercontent.com/u/44909896?v=4" width="100;" alt="IzStriker"/>
+            <br />
+            <sub><b>IzStriker</b></sub>
+        </a>
+    </td></tr>
+<tr>
+    <td align="center">
+        <a href="https://github.com/babeuh">
+            <img src="https://avatars.githubusercontent.com/u/60193302?v=4" width="100;" alt="babeuh"/>
+            <br />
+            <sub><b>Raphael Le Goaller</b></sub>
         </a>
     </td></tr>
 </table>

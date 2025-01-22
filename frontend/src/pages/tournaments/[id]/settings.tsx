@@ -14,26 +14,36 @@ import {
 } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import { useForm } from '@mantine/form';
-import { IconCalendar, IconCalendarTime } from '@tabler/icons-react';
+import { MdDelete } from '@react-icons/all-files/md/MdDelete';
+import { IconCalendar, IconCalendarTime, IconCopy } from '@tabler/icons-react';
 import assert from 'assert';
 import { useTranslation } from 'next-i18next';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { useRouter } from 'next/router';
 import React from 'react';
 import { SWRResponse } from 'swr';
 
 import NotFoundTitle from '../../404';
 import { DropzoneButton } from '../../../components/utils/file_upload';
-import { GenericSkeleton } from '../../../components/utils/skeletons';
+import { GenericSkeletonThreeRows } from '../../../components/utils/skeletons';
 import { capitalize, getBaseURL, getTournamentIdFromRouter } from '../../../components/utils/util';
 import { Club } from '../../../interfaces/club';
-import { Tournament, getTournamentEndpoint } from '../../../interfaces/tournament';
-import { getBaseApiUrl, getClubs, getTournamentById, removeLogo } from '../../../services/adapter';
-import { updateTournament } from '../../../services/tournament';
+import { Tournament } from '../../../interfaces/tournament';
+import {
+  getBaseApiUrl,
+  getClubs,
+  getTournamentById,
+  handleRequestError,
+  removeTournamentLogo,
+} from '../../../services/adapter';
+import { deleteTournament, updateTournament } from '../../../services/tournament';
 import TournamentLayout from '../_tournament_layout';
 
 export function TournamentLogo({ tournament }: { tournament: Tournament | null }) {
   if (tournament == null || tournament.logo_path == null) return null;
-  return <Image radius="md" src={`${getBaseApiUrl()}/static/${tournament.logo_path}`} />;
+  return (
+    <Image radius="md" src={`${getBaseApiUrl()}/static/tournament-logos/${tournament.logo_path}`} />
+  );
 }
 
 function GeneralTournamentForm({
@@ -45,6 +55,7 @@ function GeneralTournamentForm({
   swrTournamentResponse: SWRResponse;
   clubs: Club[];
 }) {
+  const router = useRouter();
   const { t } = useTranslation();
 
   const form = useForm({
@@ -151,11 +162,32 @@ function GeneralTournamentForm({
         </Grid>
       </Fieldset>
       <Fieldset legend={t('dashboard_settings_title')} mt="lg" radius="md">
-        <TextInput
-          label={t('dashboard_link_label')}
-          placeholder={t('dashboard_link_placeholder')}
-          {...form.getInputProps('dashboard_endpoint')}
-        />
+        <Text fz="sm">{t('dashboard_link_label')}</Text>
+        <Grid>
+          <Grid.Col span={{ sm: 9 }}>
+            <TextInput
+              placeholder={t('dashboard_link_placeholder')}
+              {...form.getInputProps('dashboard_endpoint')}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ sm: 3 }}>
+            <CopyButton
+              value={`${getBaseURL()}/tournaments/${tournament.dashboard_endpoint}/dashboard`}
+            >
+              {({ copied, copy }) => (
+                <Button
+                  disabled={form.values.dashboard_endpoint === ''}
+                  leftSection={<IconCopy size="1.1rem" stroke={1.5} />}
+                  fullWidth
+                  color={copied ? 'teal' : 'indigo'}
+                  onClick={copy}
+                >
+                  {copied ? t('copied_url_button') : t('copy_url_button')}
+                </Button>
+              )}
+            </CopyButton>
+          </Grid.Col>
+        </Grid>
 
         <Checkbox
           mt="lg"
@@ -163,7 +195,11 @@ function GeneralTournamentForm({
           {...form.getInputProps('dashboard_public', { type: 'checkbox' })}
         />
 
-        <DropzoneButton tournament={tournament} swrTournamentResponse={swrTournamentResponse} />
+        <DropzoneButton
+          tournamentId={tournament.id}
+          swrResponse={swrTournamentResponse}
+          variant="tournament"
+        />
         <Center my="lg">
           <div style={{ width: '50%' }}>
             <TournamentLogo tournament={tournament} />
@@ -174,7 +210,7 @@ function GeneralTournamentForm({
           color="red"
           fullWidth
           onClick={async () => {
-            await removeLogo(tournament.id);
+            await removeTournamentLogo(tournament.id);
             await swrTournamentResponse.mutate();
           }}
         >
@@ -197,17 +233,23 @@ function GeneralTournamentForm({
         {t('save_button')}
       </Button>
 
-      {tournament != null ? (
-        <CopyButton
-          value={`${getBaseURL()}/tournaments/${getTournamentEndpoint(tournament)}/dashboard`}
-        >
-          {({ copied, copy }) => (
-            <Button fullWidth mt={8} color={copied ? 'teal' : 'blue'} onClick={copy}>
-              {copied ? t('copied_dashboard_url_button') : t('copy_dashboard_url_button')}
-            </Button>
-          )}
-        </CopyButton>
-      ) : null}
+      <Button
+        fullWidth
+        variant="outline"
+        mt="sm"
+        color="red"
+        size="sm"
+        leftSection={<MdDelete size={20} />}
+        onClick={async () => {
+          await deleteTournament(tournament.id)
+            .then(async () => {
+              await router.push('/');
+            })
+            .catch((response: any) => handleRequestError(response));
+        }}
+      >
+        {t('delete_tournament_button')}
+      </Button>
     </form>
   );
 }
@@ -224,7 +266,7 @@ export default function SettingsPage() {
   let content = <NotFoundTitle />;
 
   if (swrTournamentResponse.isLoading || swrClubsResponse.isLoading) {
-    content = <GenericSkeleton />;
+    content = <GenericSkeletonThreeRows />;
   }
 
   if (tournamentDataFull != null) {

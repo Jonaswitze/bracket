@@ -20,7 +20,9 @@ from bracket.routes import (
     internals,
     matches,
     players,
+    rankings,
     rounds,
+    stage_item_inputs,
     stage_items,
     stages,
     teams,
@@ -46,7 +48,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if environment is Environment.PRODUCTION:
         start_cronjobs()
 
-    if environment is Environment.PRODUCTION and config.cors_origins == "*":
+    if environment is Environment.PRODUCTION and not config.is_cors_enabled():
         logger.warning("It's advised to set the `CORS_ORIGINS` environment variable in production")
 
     yield
@@ -58,14 +60,16 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 routers = {
-    "Internals": internals.router,
     "Auth": auth.router,
     "Clubs": clubs.router,
     "Courts": courts.router,
+    "Internals": internals.router,
     "Matches": matches.router,
     "Players": players.router,
+    "Rankings": rankings.router,
     "Rounds": rounds.router,
     "Stage Items": stage_items.router,
+    "Stage Item Inputs": stage_item_inputs.router,
     "Stages": stages.router,
     "Teams": teams.router,
     "Tournaments": tournaments.router,

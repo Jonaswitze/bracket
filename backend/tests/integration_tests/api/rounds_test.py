@@ -26,7 +26,11 @@ async def test_create_round(
         ) as stage_inserted,
         inserted_stage_item(
             DUMMY_STAGE_ITEM1.model_copy(
-                update={"stage_id": stage_inserted.id, "type": StageType.SWISS}
+                update={
+                    "stage_id": stage_inserted.id,
+                    "type": StageType.SWISS,
+                    "ranking_id": auth_context.ranking.id,
+                }
             )
         ) as stage_item_inserted,
     ):
@@ -51,7 +55,9 @@ async def test_delete_round(
             DUMMY_STAGE1.model_copy(update={"tournament_id": auth_context.tournament.id})
         ) as stage_inserted,
         inserted_stage_item(
-            DUMMY_STAGE_ITEM1.model_copy(update={"stage_id": stage_inserted.id})
+            DUMMY_STAGE_ITEM1.model_copy(
+                update={"stage_id": stage_inserted.id, "ranking_id": auth_context.ranking.id}
+            )
         ) as stage_item_inserted,
         inserted_round(
             DUMMY_ROUND1.model_copy(update={"stage_item_id": stage_item_inserted.id})
@@ -69,14 +75,16 @@ async def test_delete_round(
 async def test_update_round(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
-    body = {"name": "Some new name", "is_draft": True, "is_active": False}
+    body = {"name": "Some new name", "is_draft": True}
     async with (
         inserted_team(DUMMY_TEAM1.model_copy(update={"tournament_id": auth_context.tournament.id})),
         inserted_stage(
             DUMMY_STAGE1.model_copy(update={"tournament_id": auth_context.tournament.id})
         ) as stage_inserted,
         inserted_stage_item(
-            DUMMY_STAGE_ITEM1.model_copy(update={"stage_id": stage_inserted.id})
+            DUMMY_STAGE_ITEM1.model_copy(
+                update={"stage_id": stage_inserted.id, "ranking_id": auth_context.ranking.id}
+            )
         ) as stage_item_inserted,
         inserted_round(
             DUMMY_ROUND1.model_copy(update={"stage_item_id": stage_item_inserted.id})
@@ -93,6 +101,5 @@ async def test_update_round(
         )
         assert updated_round.name == body["name"]
         assert updated_round.is_draft == body["is_draft"]
-        assert updated_round.is_active == body["is_active"]
 
         await assert_row_count_and_clear(rounds, 1)

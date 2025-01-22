@@ -20,6 +20,7 @@ export function getTeamsLookup(tournamentId: number) {
 
 export function getStageItemLookup(swrStagesResponse: SWRResponse) {
   let result: any[] = [];
+  if (swrStagesResponse?.data == null) return Object.fromEntries(result);
 
   swrStagesResponse.data.data.map((stage: StageWithStageItems) =>
     stage.stage_items.forEach((stage_item) => {
@@ -52,6 +53,23 @@ export function getStageItemTeamIdsLookup(swrStagesResponse: SWRResponse) {
   return Object.fromEntries(result);
 }
 
+export function getStageItemTeamsLookup(swrStagesResponse: SWRResponse) {
+  let result: any[] = [];
+
+  swrStagesResponse.data.data.map((stage: StageWithStageItems) =>
+    stage.stage_items
+      .sort((si1: any, si2: any) => (si1.name > si2.name ? 1 : -1))
+      .forEach((stageItem) => {
+        const teams_with_inputs = stageItem.inputs.filter((input) => input.team != null);
+
+        if (teams_with_inputs.length > 0) {
+          result = result.concat([[stageItem.id, teams_with_inputs]]);
+        }
+      })
+  );
+  return Object.fromEntries(result);
+}
+
 export function getMatchLookup(swrStagesResponse: SWRResponse) {
   let result: any[] = [];
 
@@ -61,19 +79,6 @@ export function getMatchLookup(swrStagesResponse: SWRResponse) {
         round.matches.forEach((match) => {
           result = result.concat([[match.id, { match, stageItem }]]);
         });
-      });
-    })
-  );
-  return Object.fromEntries(result);
-}
-
-export function getRoundsLookup(swrStagesResponse: SWRResponse) {
-  let result: any[] = [];
-
-  swrStagesResponse.data.data.map((stage: StageWithStageItems) =>
-    stage.stage_items.forEach((stageItem) => {
-      stageItem.rounds.forEach((round) => {
-        result = result.concat([[round.id, round]]);
       });
     })
   );

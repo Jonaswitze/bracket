@@ -1,7 +1,7 @@
 from typing import Any
 
 from bracket.database import database
-from bracket.models.db.tournament import Tournament, TournamentUpdateBody
+from bracket.models.db.tournament import Tournament, TournamentBody, TournamentUpdateBody
 from bracket.utils.id_types import TournamentId
 
 
@@ -74,3 +74,35 @@ async def sql_update_tournament(
         query=query,
         values={"tournament_id": tournament_id, **tournament.model_dump()},
     )
+
+
+async def sql_create_tournament(tournament: TournamentBody) -> TournamentId:
+    query = """
+        INSERT INTO tournaments (
+            name,
+            start_time,
+            club_id,
+            dashboard_public,
+            dashboard_endpoint,
+            logo_path,
+            players_can_be_in_multiple_teams,
+            auto_assign_courts,
+            duration_minutes,
+            margin_minutes
+        )
+        VALUES (
+            :name,
+            :start_time,
+            :club_id,
+            :dashboard_public,
+            :dashboard_endpoint,
+            :logo_path,
+            :players_can_be_in_multiple_teams,
+            :auto_assign_courts,
+            :duration_minutes,
+            :margin_minutes
+        )
+        RETURNING id
+        """
+    new_id = await database.fetch_val(query=query, values=tournament.model_dump())
+    return TournamentId(new_id)

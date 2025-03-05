@@ -2,13 +2,12 @@ name: contributors
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - 'master'
+  schedule:
+    - cron: '0 18 * * 5'
 
 jobs:
     update-contributors-readme:
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
         name: Update contributors in README.md
         steps:
             - name: Contribute List
@@ -16,11 +15,11 @@ jobs:
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                  commit_message: "Update contributors in README.md"
-                  pr_title_on_protected: "Update contributors in README.md"
+                  commit_message: "Update contributors in readme"
+                  pr_title_on_protected: "Update contributors in readme"
 
     update-contributors-docs:
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
         name: Update contributors in docs
         steps:
             - name: Contribute List

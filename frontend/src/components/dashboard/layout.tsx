@@ -1,10 +1,22 @@
-import { Center, Image, Skeleton, Title } from '@mantine/core';
+import {
+  Box,
+  Center,
+  Container,
+  Group,
+  Image,
+  Skeleton,
+  Title,
+  UnstyledButton,
+} from '@mantine/core';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
 import React from 'react';
 import QRCode from 'react-qr-code';
 
 import { Tournament } from '../../interfaces/tournament';
 import { getBaseApiUrl } from '../../services/adapter';
 import { getBaseURL } from '../utils/util';
+import classes from './layout.module.css';
 
 export function TournamentQRCode({ tournamentDataFull }: { tournamentDataFull: Tournament }) {
   if (tournamentDataFull == null) {
@@ -43,7 +55,8 @@ export function TournamentLogo({ tournamentDataFull }: { tournamentDataFull: Tou
       <Image
         radius="lg"
         mt="1rem"
-        src={`${getBaseApiUrl()}/static/${tournamentDataFull.logo_path}`}
+        alt="Logo of the tournament"
+        src={`${getBaseApiUrl()}/static/tournament-logos/${tournamentDataFull.logo_path}`}
         style={{ maxWidth: '400px' }}
       />
     </>
@@ -63,5 +76,44 @@ export function TournamentTitle({ tournamentDataFull }: { tournamentDataFull: To
     <Title>{tournamentDataFull.name}</Title>
   ) : (
     <Skeleton height={50} radius="lg" mb="xl" />
+  );
+}
+
+export function DoubleHeader({ tournamentData }: { tournamentData: Tournament }) {
+  const router = useRouter();
+  const endpoint = tournamentData.dashboard_endpoint;
+  const pathName = router.pathname.replace('[id]', endpoint).replace(/\/+$/, '');
+
+  const mainLinks = [
+    { link: `/tournaments/${endpoint}/dashboard`, label: 'Matches' },
+    { link: `/tournaments/${endpoint}/dashboard/standings`, label: 'Standings' },
+  ];
+
+  const mainItems = mainLinks.map((item) => (
+    <Link
+      href={item.link}
+      key={item.label}
+      className={classes.mainLink}
+      data-active={item.link === pathName || undefined}
+    >
+      {item.label}
+    </Link>
+  ));
+
+  return (
+    <header className={classes.header}>
+      <Container className={classes.inner}>
+        <UnstyledButton component={Link} href={`/tournaments/${endpoint}/dashboard`}>
+          <Title size="lg" lineClamp={1}>
+            {tournamentData.name}
+          </Title>
+        </UnstyledButton>
+        <Box className={classes.links}>
+          <Group gap={0} className={classes.mainLinks}>
+            {mainItems}
+          </Group>
+        </Box>
+      </Container>
+    </header>
   );
 }

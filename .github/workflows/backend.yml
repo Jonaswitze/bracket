@@ -4,13 +4,14 @@ on:
   pull_request:
     paths:
       - 'backend/**'
+      - 'codecov.yml'
   push:
     branches:
       - 'master'
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     services:
       postgres:
@@ -24,6 +25,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Install pipenv
         run: python3 -m pip install --upgrade pipenv wheel virtualenv
@@ -46,7 +51,7 @@ jobs:
           ENVIRONMENT: CI
 
       - name: Upload coverage report to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 

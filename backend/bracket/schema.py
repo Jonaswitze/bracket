@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, Table
+from sqlalchemy import Column, ForeignKey, Integer, String, Table, UniqueConstraint, func
 from sqlalchemy.orm import declarative_base  # type: ignore[attr-defined]
 from sqlalchemy.sql.sqltypes import BigInteger, Boolean, DateTime, Enum, Float, Text
 
@@ -11,7 +11,7 @@ clubs = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, index=True, autoincrement=True),
     Column("name", String, nullable=False, index=True),
-    Column("created", DateTimeTZ, nullable=False),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
 )
 
 tournaments = Table(
@@ -19,7 +19,7 @@ tournaments = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, index=True),
     Column("name", String, nullable=False, index=True),
-    Column("created", DateTimeTZ, nullable=False, server_default="now()"),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
     Column("start_time", DateTimeTZ, nullable=False),
     Column("club_id", BigInteger, ForeignKey("clubs.id"), index=True, nullable=False),
     Column("dashboard_public", Boolean, nullable=False),
@@ -29,6 +29,17 @@ tournaments = Table(
     Column("auto_assign_courts", Boolean, nullable=False, server_default="f"),
     Column("duration_minutes", Integer, nullable=False, server_default="15"),
     Column("margin_minutes", Integer, nullable=False, server_default="5"),
+    Column(
+        "status",
+        Enum(
+            "OPEN",
+            "ARCHIVED",
+            name="tournament_status",
+        ),
+        nullable=False,
+        server_default="OPEN",
+        index=True,
+    ),
 )
 
 stages = Table(
@@ -36,7 +47,7 @@ stages = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, index=True),
     Column("name", String, nullable=False, index=True),
-    Column("created", DateTimeTZ, nullable=False),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
     Column("tournament_id", BigInteger, ForeignKey("tournaments.id"), index=True, nullable=False),
     Column("is_active", Boolean, nullable=False, server_default="false"),
 )
@@ -46,9 +57,10 @@ stage_items = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, index=True),
     Column("name", Text, nullable=False),
-    Column("created", DateTimeTZ, nullable=False, server_default="now()"),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
     Column("stage_id", BigInteger, ForeignKey("stages.id"), index=True, nullable=False),
     Column("team_count", Integer, nullable=False),
+    Column("ranking_id", BigInteger, ForeignKey("rankings.id"), nullable=False),
     Column(
         "type",
         Enum(
@@ -77,6 +89,12 @@ stage_item_inputs = Table(
     Column("team_id", BigInteger, ForeignKey("teams.id"), nullable=True),
     Column("winner_from_stage_item_id", BigInteger, ForeignKey("stage_items.id"), nullable=True),
     Column("winner_position", Integer, nullable=True),
+    Column("points", Float, nullable=False, server_default="0"),
+    Column("wins", Integer, nullable=False, server_default="0"),
+    Column("draws", Integer, nullable=False, server_default="0"),
+    Column("losses", Integer, nullable=False, server_default="0"),
+    UniqueConstraint("stage_item_id", "team_id"),
+    UniqueConstraint("stage_item_id", "winner_from_stage_item_id", "winner_position"),
 )
 
 rounds = Table(
@@ -84,9 +102,8 @@ rounds = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, index=True),
     Column("name", Text, nullable=False),
-    Column("created", DateTimeTZ, nullable=False),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
     Column("is_draft", Boolean, nullable=False),
-    Column("is_active", Boolean, nullable=False, server_default="false"),
     Column("stage_item_id", BigInteger, ForeignKey("stage_items.id"), nullable=False),
 )
 
@@ -95,28 +112,32 @@ matches = Table(
     "matches",
     metadata,
     Column("id", BigInteger, primary_key=True, index=True),
-    Column("created", DateTimeTZ, nullable=False),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
     Column("start_time", DateTimeTZ, nullable=True),
     Column("duration_minutes", Integer, nullable=True),
     Column("margin_minutes", Integer, nullable=True),
     Column("custom_duration_minutes", Integer, nullable=True),
     Column("custom_margin_minutes", Integer, nullable=True),
     Column("round_id", BigInteger, ForeignKey("rounds.id"), nullable=False),
-    Column("team1_id", BigInteger, ForeignKey("teams.id"), nullable=True),
-    Column("team2_id", BigInteger, ForeignKey("teams.id"), nullable=True),
+    Column("stage_item_input1_id", BigInteger, ForeignKey("stage_item_inputs.id"), nullable=True),
+    Column("stage_item_input2_id", BigInteger, ForeignKey("stage_item_inputs.id"), nullable=True),
+    Column("stage_item_input1_conflict", Boolean, nullable=False),
+    Column("stage_item_input2_conflict", Boolean, nullable=False),
     Column(
-        "team1_winner_from_stage_item_id", BigInteger, ForeignKey("stage_items.id"), nullable=True
+        "stage_item_input1_winner_from_match_id",
+        BigInteger,
+        ForeignKey("matches.id"),
+        nullable=True,
     ),
     Column(
-        "team2_winner_from_stage_item_id", BigInteger, ForeignKey("stage_items.id"), nullable=True
+        "stage_item_input2_winner_from_match_id",
+        BigInteger,
+        ForeignKey("matches.id"),
+        nullable=True,
     ),
-    Column("team1_winner_position", Integer, nullable=True),
-    Column("team2_winner_position", Integer, nullable=True),
-    Column("team1_winner_from_match_id", BigInteger, ForeignKey("matches.id"), nullable=True),
-    Column("team2_winner_from_match_id", BigInteger, ForeignKey("matches.id"), nullable=True),
     Column("court_id", BigInteger, ForeignKey("courts.id"), nullable=True),
-    Column("team1_score", Integer, nullable=False),
-    Column("team2_score", Integer, nullable=False),
+    Column("stage_item_input1_score", Integer, nullable=False),
+    Column("stage_item_input2_score", Integer, nullable=False),
     Column("position_in_schedule", Integer, nullable=True),
 )
 
@@ -125,7 +146,7 @@ teams = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, index=True),
     Column("name", String, nullable=False, index=True),
-    Column("created", DateTimeTZ, nullable=False),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
     Column("tournament_id", BigInteger, ForeignKey("tournaments.id"), index=True, nullable=False),
     Column("active", Boolean, nullable=False, index=True, server_default="t"),
     Column("elo_score", Float, nullable=False, server_default="0"),
@@ -133,6 +154,7 @@ teams = Table(
     Column("wins", Integer, nullable=False, server_default="0"),
     Column("draws", Integer, nullable=False, server_default="0"),
     Column("losses", Integer, nullable=False, server_default="0"),
+    Column("logo_path", String, nullable=True),
 )
 
 players = Table(
@@ -140,7 +162,7 @@ players = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, index=True),
     Column("name", String, nullable=False, index=True),
-    Column("created", DateTimeTZ, nullable=False),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
     Column("tournament_id", BigInteger, ForeignKey("tournaments.id"), index=True, nullable=False),
     Column("elo_score", Float, nullable=False),
     Column("swiss_score", Float, nullable=False),
@@ -157,7 +179,7 @@ users = Table(
     Column("email", String, nullable=False, index=True, unique=True),
     Column("name", String, nullable=False),
     Column("password_hash", String, nullable=False),
-    Column("created", DateTimeTZ, nullable=False),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
     Column(
         "account_type",
         Enum(
@@ -200,6 +222,19 @@ courts = Table(
     metadata,
     Column("id", BigInteger, primary_key=True, index=True),
     Column("name", Text, nullable=False),
-    Column("created", DateTimeTZ, nullable=False),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
     Column("tournament_id", BigInteger, ForeignKey("tournaments.id"), nullable=False, index=True),
+)
+
+rankings = Table(
+    "rankings",
+    metadata,
+    Column("id", BigInteger, primary_key=True, index=True),
+    Column("created", DateTimeTZ, nullable=False, server_default=func.now()),
+    Column("tournament_id", BigInteger, ForeignKey("tournaments.id"), nullable=False, index=True),
+    Column("position", Integer, nullable=False),
+    Column("win_points", Float, nullable=False),
+    Column("draw_points", Float, nullable=False),
+    Column("loss_points", Float, nullable=False),
+    Column("add_score_points", Boolean, nullable=False),
 )

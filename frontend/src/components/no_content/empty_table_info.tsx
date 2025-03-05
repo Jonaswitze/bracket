@@ -1,8 +1,8 @@
-import { Alert, Container, Group, Text, Title } from '@mantine/core';
+import { Alert, Container, Text, Title } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { useTranslation } from 'next-i18next';
 import React from 'react';
-import { MdOutlineConstruction } from 'react-icons/md';
+import { HiMiniWrenchScrewdriver } from 'react-icons/hi2';
 
 import classes from './empty_table_info.module.css';
 
@@ -28,17 +28,22 @@ export function EmptyTableInfo({
   );
 }
 
-export function NoContent({ title, description }: { title: string; description?: string }) {
+export function NoContent({
+  title,
+  description,
+  icon,
+}: {
+  title: string;
+  description?: string;
+  icon?: React.ReactNode;
+}) {
   return (
-    <Container>
-      <div className={classes.label}>
-        <MdOutlineConstruction />
-      </div>
+    <Container mt="md">
+      <div className={classes.label}>{icon || <HiMiniWrenchScrewdriver />}</div>
       <Title className={classes.title}>{title}</Title>
-      <Text size="lg" ta="center" className={classes.description}>
+      <Text size="lg" ta="center" className={classes.description} inherit>
         {description}
       </Text>
-      <Group justify="center"></Group>
     </Container>
   );
 }

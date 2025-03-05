@@ -5,7 +5,14 @@ from heliclockter import datetime_utc
 from bracket.database import database
 from bracket.models.db.match import Match, MatchBody, MatchCreateBody
 from bracket.models.db.tournament import Tournament
-from bracket.utils.id_types import CourtId, MatchId, StageItemId, TeamId
+from bracket.utils.id_types import (
+    CourtId,
+    MatchId,
+    RoundId,
+    StageItemId,
+    StageItemInputId,
+    TournamentId,
+)
 
 
 async def sql_delete_match(match_id: MatchId) -> None:
@@ -34,39 +41,35 @@ async def sql_create_match(match: MatchCreateBody) -> Match:
         INSERT INTO matches (
             round_id,
             court_id,
-            team1_id,
-            team2_id,
-            team1_winner_from_stage_item_id,
-            team2_winner_from_stage_item_id,
-            team1_winner_position,
-            team2_winner_position,
-            team1_winner_from_match_id,
-            team2_winner_from_match_id,
+            stage_item_input1_id,
+            stage_item_input2_id,
+            stage_item_input1_winner_from_match_id,
+            stage_item_input2_winner_from_match_id,
             duration_minutes,
             custom_duration_minutes,
             margin_minutes,
             custom_margin_minutes,
-            team1_score,
-            team2_score,
+            stage_item_input1_score,
+            stage_item_input2_score,
+            stage_item_input1_conflict,
+            stage_item_input2_conflict,
             created
         )
         VALUES (
             :round_id,
             :court_id,
-            :team1_id,
-            :team2_id,
-            :team1_winner_from_stage_item_id,
-            :team2_winner_from_stage_item_id,
-            :team1_winner_position,
-            :team2_winner_position,
-            :team1_winner_from_match_id,
-            :team2_winner_from_match_id,
+            :stage_item_input1_id,
+            :stage_item_input2_id,
+            :stage_item_input1_winner_from_match_id,
+            :stage_item_input2_winner_from_match_id,
             :duration_minutes,
             :custom_duration_minutes,
             :margin_minutes,
             :custom_margin_minutes,
             0,
             0,
+            false,
+            false,
             NOW()
         )
         RETURNING *
@@ -83,8 +86,8 @@ async def sql_update_match(match_id: MatchId, match: MatchBody, tournament: Tour
     query = """
         UPDATE matches
         SET round_id = :round_id,
-            team1_score = :team1_score,
-            team2_score = :team2_score,
+            stage_item_input1_score = :stage_item_input1_score,
+            stage_item_input2_score = :stage_item_input2_score,
             court_id = :court_id,
             custom_duration_minutes = :custom_duration_minutes,
             custom_margin_minutes = :custom_margin_minutes,
@@ -115,17 +118,24 @@ async def sql_update_match(match_id: MatchId, match: MatchBody, tournament: Tour
     )
 
 
-async def sql_update_team_ids_for_match(
-    match_id: MatchId, team1_id: TeamId | None, team2_id: TeamId | None = None
+async def sql_set_input_ids_for_match(
+    round_id: RoundId, match_id: MatchId, input_ids: list[StageItemInputId | None]
 ) -> None:
     query = """
         UPDATE matches
-        SET team1_id = :team1_id,
-            team2_id = :team2_id
-        WHERE matches.id = :match_id
+        SET stage_item_input1_id = :input1_id,
+            stage_item_input2_id = :input2_id
+        WHERE round_id = :round_id
+        AND matches.id = :match_id
         """
     await database.execute(
-        query=query, values={"match_id": match_id, "team1_id": team1_id, "team2_id": team2_id}
+        query=query,
+        values={
+            "round_id": round_id,
+            "match_id": match_id,
+            "input1_id": input_ids[0],
+            "input2_id": input_ids[1],
+        },
     )
 
 
@@ -138,6 +148,8 @@ async def sql_reschedule_match(
     margin_minutes: int,
     custom_duration_minutes: int | None,
     custom_margin_minutes: int | None,
+    stage_item_input1_conflict: bool,
+    stage_item_input2_conflict: bool,
 ) -> None:
     query = """
         UPDATE matches
@@ -147,7 +159,9 @@ async def sql_reschedule_match(
             duration_minutes = :duration_minutes,
             margin_minutes = :margin_minutes,
             custom_duration_minutes = :custom_duration_minutes,
-            custom_margin_minutes = :custom_margin_minutes
+            custom_margin_minutes = :custom_margin_minutes,
+            stage_item_input1_conflict = :stage_item_input1_conflict,
+            stage_item_input2_conflict = :stage_item_input2_conflict
         WHERE matches.id = :match_id
         """
     await database.execute(
@@ -161,12 +175,13 @@ async def sql_reschedule_match(
             "margin_minutes": margin_minutes,
             "custom_duration_minutes": custom_duration_minutes,
             "custom_margin_minutes": custom_margin_minutes,
+            "stage_item_input1_conflict": stage_item_input1_conflict,
+            "stage_item_input2_conflict": stage_item_input2_conflict,
         },
     )
 
 
 async def sql_reschedule_match_and_determine_duration_and_margin(
-    match_id: MatchId,
     court_id: CourtId | None,
     start_time: datetime_utc,
     position_in_schedule: int | None,
@@ -184,7 +199,7 @@ async def sql_reschedule_match_and_determine_duration_and_margin(
         else match.custom_margin_minutes
     )
     await sql_reschedule_match(
-        match_id,
+        match.id,
         court_id,
         start_time,
         position_in_schedule,
@@ -192,6 +207,8 @@ async def sql_reschedule_match_and_determine_duration_and_margin(
         margin_minutes,
         match.custom_duration_minutes,
         match.custom_margin_minutes,
+        match.stage_item_input1_conflict,
+        match.stage_item_input2_conflict,
     )
 
 
@@ -207,3 +224,26 @@ async def sql_get_match(match_id: MatchId) -> Match:
         raise ValueError("Could not create stage")
 
     return Match.model_validate(dict(result._mapping))
+
+
+async def clear_scores_for_matches_in_stage_item(
+    tournament_id: TournamentId, stage_item_id: StageItemId
+) -> None:
+    query = """
+        UPDATE matches
+        SET stage_item_input1_score = 0,
+            stage_item_input2_score = 0
+        FROM rounds
+        JOIN stage_items ON rounds.stage_item_id = stage_items.id
+        JOIN stages ON stages.id = stage_items.stage_id
+        WHERE   rounds.id = matches.round_id
+            AND stages.tournament_id = :tournament_id
+            AND stage_items.id = :stage_item_id
+        """
+    await database.execute(
+        query=query,
+        values={
+            "stage_item_id": stage_item_id,
+            "tournament_id": tournament_id,
+        },
+    )

@@ -10,9 +10,13 @@ import { createStage } from '../../services/stage';
 export default function CreateStageButton({
   tournament,
   swrStagesResponse,
+  swrAvailableInputsResponse,
+  swrRankingsPerStageItemResponse,
 }: {
   tournament: Tournament;
   swrStagesResponse: SWRResponse;
+  swrAvailableInputsResponse: SWRResponse;
+  swrRankingsPerStageItemResponse: SWRResponse;
 }) {
   const { t } = useTranslation();
 
@@ -25,6 +29,8 @@ export default function CreateStageButton({
       onClick={async () => {
         await createStage(tournament.id);
         await swrStagesResponse.mutate();
+        await swrAvailableInputsResponse.mutate();
+        await swrRankingsPerStageItemResponse.mutate();
       }}
       leftSection={<GoPlus size={24} />}
     >
@@ -47,7 +53,7 @@ export function CreateStageButtonLarge({
       variant="outline"
       color="green"
       size="lg"
-      style={{ marginRight: 10, width: '25%' }}
+      style={{ marginRight: 10 }}
       onClick={async () => {
         await createStage(tournament.id);
         await swrStagesResponse.mutate();

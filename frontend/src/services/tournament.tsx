@@ -28,9 +28,15 @@ export async function createTournament(
 }
 
 export async function deleteTournament(tournament_id: number) {
-  return createAxios()
-    .delete(`tournaments/${tournament_id}`)
-    .catch((response: any) => handleRequestError(response));
+  return createAxios().delete(`tournaments/${tournament_id}`);
+}
+
+export async function archiveTournament(tournament_id: number) {
+  return createAxios().post(`tournaments/${tournament_id}/change-status`, { status: 'ARCHIVED' });
+}
+
+export async function unarchiveTournament(tournament_id: number) {
+  return createAxios().post(`tournaments/${tournament_id}/change-status`, { status: 'OPEN' });
 }
 
 export async function updateTournament(
@@ -62,5 +68,5 @@ export function getTournamentResponseByEndpointName() {
   const endpointName = getTournamentEndpointFromRouter();
   const swrTournamentsResponse = getTournamentByEndpointName(endpointName);
 
-  return swrTournamentsResponse.data != null ? swrTournamentsResponse.data.data : null;
+  return swrTournamentsResponse.data?.data;
 }

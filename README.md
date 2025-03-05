@@ -1,19 +1,50 @@
-<img align="left" alt="Favicon of Bracket" src="frontend/public/favicon.svg" height="150" />
+<p align="center">
+  <img
+    width="500"
+    src="frontend/public/favicon-wide.svg"
+    alt="Bracket - Tournament System"
+  />
+</p>
 
-# Bracket
-[![codecov](https://codecov.io/gh/evroon/bracket/branch/master/graph/badge.svg?token=YJL0DVPFFG)](https://codecov.io/gh/evroon/bracket)
-[![backend](https://github.com/evroon/bracket/actions/workflows/backend.yml/badge.svg)](https://github.com/evroon/bracket/actions/workflows/backend.yml)
-[![frontend](https://github.com/evroon/bracket/actions/workflows/frontend.yml/badge.svg)](https://github.com/evroon/bracket/actions/workflows/frontend.yml)
-[![last
-commit](https://img.shields.io/github/last-commit/evroon/bracket)](https://img.shields.io/github/last-commit/evroon/bracket)
-[![release](https://img.shields.io/github/v/release/evroon/bracket)](https://img.shields.io/github/v/release/evroon/bracket)<br/>
-[Demo](https://www.bracketapp.nl/demo) |
-[Documentation](https://docs.bracketapp.nl) |
-[Quickstart](https://docs.bracketapp.nl/docs/running-bracket/quickstart) |
-[GitHub](https://github.com/evroon/bracket) |
-[Releases](https://github.com/evroon/bracket/releases)
-
-<br/>
+<p align="center">
+  <a href="https://github.com/evroon/bracket/actions"
+    ><img
+      src="https://img.shields.io/github/actions/workflow/status/evroon/bracket/backend.yml"
+      alt="build status"
+  /></a>
+  <a href="https://crowdin.com/project/bracket"
+    ><img
+      src="https://badges.crowdin.net/bracket/localized.svg"
+      alt="translations"
+  /></a>
+  <a href="https://github.com/evroon/bracket/commits/"
+    ><img
+      src="https://img.shields.io/github/last-commit/evroon/bracket"
+      alt="last commit"
+  /></a>
+  <a href="https://github.com/evroon/bracket/releases"
+    ><img
+      src="https://img.shields.io/github/v/release/evroon/bracket"
+      alt="release"
+  /></a>
+  <a href="https://codecov.io/gh/evroon/bracket"
+    ><img
+      src="https://codecov.io/gh/evroon/bracket/branch/master/graph/badge.svg?token=YJL0DVPFFG"
+      alt="codecov"
+  /></a>
+</p>
+<p align="center">
+  <a href="https://www.bracketapp.nl/demo">Demo</a>
+  ·
+  <a href="https://docs.bracketapp.nl">Documentation</a>
+  ·
+  <a href="https://docs.bracketapp.nl/docs/running-bracket/quickstart">Quickstart</a>
+  ·
+  <a href="https://github.com/evroon/bracket">GitHub</a>
+  ·
+  <a href="https://github.com/evroon/bracket/releases">Releases</a>
+</p>
+<h1></h1>
 
 Tournament system meant to be easy to use. Bracket is written in async Python (with
 [FastAPI](https://fastapi.tiangolo.com)) and [Next.js](https://nextjs.org/) as frontend using the
@@ -30,19 +61,22 @@ It has the following features:
 - Create **multiple clubs**, with **multiple tournaments** per club.
 - **Swiss tournaments** can be handled dynamically, with automatic scheduling of matches.
 
-### Preview
-<img alt="" src="docs/static/img/bracket-screenshot-design.png" width="100%" />
+<img alt="" src="docs/content/img/bracket-screenshot-design.png" width="100%" />
+
+<p align="center">
+<a href="https://docs.bracketapp.nl"><strong>Explore the Bracket docs&nbsp;&nbsp;▶</strong></a>
+</p>
 
 # Live Demo
 A demo is available for free at <https://www.bracketapp.nl/demo>. The demo lasts for 30 minutes, after which
 your data will de deleted. 
 
 # Quickstart
-To quickly run bracket to see how it works, clone it and run `docker-compose up`:
+To quickly run bracket to see how it works, clone it and run `docker compose up`:
 ```bash
 git clone git@github.com:evroon/bracket.git
 cd bracket
-sudo docker-compose up -d
+sudo docker compose up -d
 ```
 
 This will start the backend and frontend of Bracket, as well as a postgres instance. You should now
@@ -58,10 +92,8 @@ sudo docker exec bracket-backend pipenv run ./cli.py create-dev-db
 
 See also the [quickstart docs](https://docs.bracketapp.nl/docs/running-bracket/quickstart).
 
-# Development setup
-Read the [development docs](https://docs.bracketapp.nl/docs/running-bracket/development) for how to run Bracket for development.
-
-Prerequisites are `yarn`, `postgresql` and `pipenv` to run the frontend, database and backend.
+# Usage
+Read the [usage guide](https://docs.bracketapp.nl/docs/usage/guide) for how to organize a tournament in Bracket from start to finish.
 
 # Configuration
 Read the [configuration docs](https://docs.bracketapp.nl/docs/running-bracket/configuration) for how to configure Bracket.
@@ -72,18 +104,22 @@ But you can also configure Bracket using environment variables directly, for exa
 The frontend doesn't can be configured by environment variables as well, as well as `.env` files using Next.js' way of loading environment variables.
 
 # Running Bracket in production
-Read the [deployment docs](https://docs.bracketapp.nl/docs/running-bracket/deployment) for how to deploy Bracket and run it in production.
+Read the [deployment docs](https://docs.bracketapp.nl/docs/deployment) for how to deploy Bracket and run it in production.
 
 Bracket can be run in Docker or by itself (using `pipenv` and `yarn`).
+
+# Development setup
+Read the [development docs](https://docs.bracketapp.nl/docs/community/development) for how to run Bracket for development.
+
+Prerequisites are `yarn`, `postgresql` and `pipenv` to run the frontend, database and backend.
 
 # Translations
 Based on your browser settings, your language should be automatically detected and loaded. For now,
 there's no manual way of choosing a different language.
 
 ## Supported Languages
-- 🇺🇸 English `en` - *Default*
-- 🇨🇳 Chinese `zh-CN` - Contributed by [@Sevichecc](https://github.com/Sevichecc)
-- 🇳🇱 Dutch `nl` - Contributed by [@evroon](https://github.com/evroon)
+To add/refine translations, [Crowdin](https://crowdin.com/project/bracket) is used.
+See the [docs](https://docs.bracketapp.nl/docs/community/contributing/#translating) for more information.
 
 # More screenshots
 <img alt="" src="docs/static/img/schedule_preview.png" width="50%" /><img alt=""
@@ -100,9 +136,11 @@ If you're using Bracket and would like to help support its development, that wou
 
 Several areas that we need a bit of help with at the moment are:
 - ⭐ **Star Bracket** on GitHub
-- 🌐 **Translating**: Help make Bracket available to non-native English speakers by adding your language
+- 🌐 **Translating**: Help make Bracket available to non-native English speakers by adding your language (via [crowdin](https://crowdin.com/project/bracket))
 - 📣 **Spread the word** by sharing Bracket to help new users discover it
 - 🖥️ **Submit a PR** to add a new feature, fix a bug, extend/update the docs or something else
+
+See the [contribution docs](https://docs.bracketapp.nl/docs/community/contributing) for more information on how to contribute
 
 # Contributors
 <!-- readme: collaborators,contributors,dependabot/- -start -->
@@ -123,16 +161,47 @@ Several areas that we need a bit of help with at the moment are:
         </a>
     </td>
     <td align="center">
+        <a href="https://github.com/BachErik">
+            <img src="https://avatars.githubusercontent.com/u/75324423?v=4" width="100;" alt="BachErik"/>
+            <br />
+            <sub><b>BachErik</b></sub>
+        </a>
+    </td>
+    <td align="center">
+        <a href="https://github.com/djpiper28">
+            <img src="https://avatars.githubusercontent.com/u/13609136?v=4" width="100;" alt="djpiper28"/>
+            <br />
+            <sub><b>Danny Piper</b></sub>
+        </a>
+    </td>
+    <td align="center">
         <a href="https://github.com/Sevichecc">
             <img src="https://avatars.githubusercontent.com/u/91365763?v=4" width="100;" alt="Sevichecc"/>
             <br />
             <sub><b>SevicheCC</b></sub>
+        </a>
+    </td>
+    <td align="center">
+        <a href="https://github.com/IzStriker">
+            <img src="https://avatars.githubusercontent.com/u/44909896?v=4" width="100;" alt="IzStriker"/>
+            <br />
+            <sub><b>IzStriker</b></sub>
+        </a>
+    </td></tr>
+<tr>
+    <td align="center">
+        <a href="https://github.com/babeuh">
+            <img src="https://avatars.githubusercontent.com/u/60193302?v=4" width="100;" alt="babeuh"/>
+            <br />
+            <sub><b>Raphael Le Goaller</b></sub>
         </a>
     </td></tr>
 </table>
 <!-- readme: collaborators,contributors,dependabot/- -end -->
 
 # License
-Bracket is licensed under AGPL-v3.0.
+Bracket is licensed under [AGPL-v3.0](https://choosealicense.com/licenses/agpl-3.0/).
+
+Please note that any contributions also fall under this license.
 
 See [LICENSE](LICENSE)

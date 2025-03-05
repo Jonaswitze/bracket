@@ -1,20 +1,23 @@
 #!/bin/bash
-set -evo pipefail
+set -eo pipefail
 
-# Script to replace `NEXT_PUBLIC_*` environment variables because they're set at build-time but we want to set them at runtime in `docker-compose.yml`
-# Define an array of environment variable names
-env_vars=("NEXT_PUBLIC_API_BASE_URL" "NEXT_PUBLIC_HCAPTCHA_SITE_KEY")
+if [ -z ${NEXT_PUBLIC_API_BASE_URL+x} ];
+  then echo "Environment variable `NEXT_PUBLIC_API_BASE_URL` is not set, please set it in docker-compose.yml";
+  exit 1;
+fi
 
-echo "Checking that we have variables..."
-# Iterate over the array and perform checks
-for var in "${env_vars[@]}"; do
-  test -n "${!var}"
-done
 
-# Iterate over the array and perform substitutions
-for var in "${env_vars[@]}"; do
-  find /app/.next \( -type d -name .git -prune \) -o -type f -print0 | xargs -0 sed -i "s#APP_PLACEHOLDER_$var#${!var}#g"
-done
+# Replace the statically built placeholder literals from Dockerfile with run-time
+# the value of the `NEXT_PUBLIC_WEBAPP_URL` environment variable
+replace_placeholder() {
+  find .next public -type f |
+  while read file; do
+      sed -i "s|$1|$2|g" "$file" || true
+  done
+}
+
+replace_placeholder "http://NEXT_PUBLIC_API_BASE_URL_PLACEHOLDER" "$NEXT_PUBLIC_API_BASE_URL"
+replace_placeholder "NEXT_PUBLIC_HCAPTCHA_SITE_KEY_PLACEHOLDER" "$NEXT_PUBLIC_HCAPTCHA_SITE_KEY"
 
 echo "Starting Nextjs"
 exec "$@"

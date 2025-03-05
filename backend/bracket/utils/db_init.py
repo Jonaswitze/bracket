@@ -5,25 +5,31 @@ from heliclockter import datetime_utc
 
 from bracket.config import Environment, config, environment
 from bracket.database import database, engine
-from bracket.logic.ranking.elo import recalculate_ranking_for_tournament_id
+from bracket.logic.ranking.calculation import (
+    recalculate_ranking_for_stage_item,
+)
 from bracket.logic.scheduling.builder import build_matches_for_stage_item
 from bracket.models.db.account import UserAccountType
-from bracket.models.db.club import Club
-from bracket.models.db.court import Court
+from bracket.models.db.club import ClubInsertable
+from bracket.models.db.court import CourtInsertable
 from bracket.models.db.match import Match, MatchBody
-from bracket.models.db.player import Player
-from bracket.models.db.player_x_team import PlayerXTeam
-from bracket.models.db.round import Round
-from bracket.models.db.stage import Stage
-from bracket.models.db.stage_item import StageItem, StageItemCreateBody
+from bracket.models.db.player import PlayerInsertable
+from bracket.models.db.player_x_team import PlayerXTeamInsertable
+from bracket.models.db.ranking import RankingInsertable
+from bracket.models.db.round import RoundInsertable
+from bracket.models.db.stage import StageInsertable
+from bracket.models.db.stage_item import (
+    StageItemInsertable,
+    StageItemWithInputsCreate,
+)
 from bracket.models.db.stage_item_inputs import (
     StageItemInputCreateBodyFinal,
     StageItemInputCreateBodyTentative,
 )
-from bracket.models.db.team import Team
-from bracket.models.db.tournament import Tournament
-from bracket.models.db.user import User
-from bracket.models.db.user_x_club import UserXClub, UserXClubRelation
+from bracket.models.db.team import TeamInsertable
+from bracket.models.db.tournament import TournamentInsertable
+from bracket.models.db.user import UserInsertable
+from bracket.models.db.user_x_club import UserXClubInsertable, UserXClubRelation
 from bracket.schema import (
     clubs,
     courts,
@@ -31,6 +37,7 @@ from bracket.schema import (
     metadata,
     players,
     players_x_teams,
+    rankings,
     rounds,
     stage_items,
     stages,
@@ -40,7 +47,7 @@ from bracket.schema import (
     users_x_clubs,
 )
 from bracket.sql.matches import sql_update_match
-from bracket.sql.stage_items import sql_create_stage_item
+from bracket.sql.stage_items import get_stage_item, sql_create_stage_item_with_inputs
 from bracket.sql.stages import get_full_tournament_details
 from bracket.sql.tournaments import sql_get_tournament
 from bracket.sql.users import create_user, get_user
@@ -59,6 +66,7 @@ from bracket.utils.dummy_records import (
     DUMMY_PLAYER7,
     DUMMY_PLAYER8,
     DUMMY_PLAYER_X_TEAM,
+    DUMMY_RANKING1,
     DUMMY_STAGE1,
     DUMMY_STAGE2,
     DUMMY_STAGE_ITEM1,
@@ -76,6 +84,7 @@ from bracket.utils.id_types import (
     CourtId,
     PlayerId,
     PlayerXTeamId,
+    RankingId,
     StageId,
     TeamId,
     TournamentId,
@@ -96,7 +105,7 @@ async def create_admin_user() -> UserId:
     assert config.admin_password
 
     user = await create_user(
-        User(
+        UserInsertable(
             name="Admin",
             email=config.admin_email,
             password_hash=hash_password(config.admin_password),
@@ -104,7 +113,7 @@ async def create_admin_user() -> UserId:
             account_type=UserAccountType.REGULAR,
         )
     )
-    return assert_some(user.id)
+    return user.id
 
 
 async def init_db_when_empty() -> UserId | None:
@@ -138,18 +147,19 @@ async def sql_create_dev_db() -> UserId:
     alembic_stamp_head()
 
     table_lookup: dict[type, Table] = {
-        User: users,
-        Club: clubs,
-        Stage: stages,
-        Team: teams,
-        UserXClub: users_x_clubs,
-        PlayerXTeam: players_x_teams,
-        Player: players,
-        Round: rounds,
+        UserInsertable: users,
+        ClubInsertable: clubs,
+        StageInsertable: stages,
+        TeamInsertable: teams,
+        UserXClubInsertable: users_x_clubs,
+        PlayerXTeamInsertable: players_x_teams,
+        PlayerInsertable: players,
+        RoundInsertable: rounds,
         Match: matches,
-        Tournament: tournaments,
-        Court: courts,
-        StageItem: stage_items,
+        TournamentInsertable: tournaments,
+        CourtInsertable: courts,
+        StageItemInsertable: stage_items,
+        RankingInsertable: rankings,
     }
 
     async def insert_dummy(
@@ -167,18 +177,23 @@ async def sql_create_dev_db() -> UserId:
     club_id_1 = await insert_dummy(DUMMY_CLUB, ClubId)
 
     await insert_dummy(
-        UserXClub(user_id=user_id_1, club_id=club_id_1, relation=UserXClubRelation.OWNER), int
+        UserXClubInsertable(user_id=user_id_1, club_id=club_id_1, relation=UserXClubRelation.OWNER),
+        int,
     )
 
     if real_user_id is not None:
         await insert_dummy(
-            UserXClub(user_id=real_user_id, club_id=club_id_1, relation=UserXClubRelation.OWNER),
+            UserXClubInsertable(
+                user_id=real_user_id, club_id=club_id_1, relation=UserXClubRelation.OWNER
+            ),
             int,
         )
 
     tournament_id_1 = await insert_dummy(DUMMY_TOURNAMENT, TournamentId, {"club_id": club_id_1})
     stage_id_1 = await insert_dummy(DUMMY_STAGE1, StageId, {"tournament_id": tournament_id_1})
     stage_id_2 = await insert_dummy(DUMMY_STAGE2, StageId, {"tournament_id": tournament_id_1})
+
+    await insert_dummy(DUMMY_RANKING1, RankingId, {"tournament_id": tournament_id_1})
 
     team_id_1 = await insert_dummy(DUMMY_TEAM1, TeamId, {"tournament_id": tournament_id_1})
     team_id_2 = await insert_dummy(DUMMY_TEAM2, TeamId, {"tournament_id": tournament_id_1})
@@ -283,9 +298,9 @@ async def sql_create_dev_db() -> UserId:
     await insert_dummy(DUMMY_COURT1, CourtId, {"tournament_id": tournament_id_1})
     await insert_dummy(DUMMY_COURT2, CourtId, {"tournament_id": tournament_id_1})
 
-    stage_item_1 = await sql_create_stage_item(
+    stage_item_1 = await sql_create_stage_item_with_inputs(
         tournament_id_1,
-        StageItemCreateBody(
+        StageItemWithInputsCreate(
             stage_id=stage_id_1,
             name=DUMMY_STAGE_ITEM1.name,
             team_count=DUMMY_STAGE_ITEM1.team_count,
@@ -310,9 +325,9 @@ async def sql_create_dev_db() -> UserId:
             ],
         ),
     )
-    stage_item_2 = await sql_create_stage_item(
+    stage_item_2 = await sql_create_stage_item_with_inputs(
         tournament_id_1,
-        StageItemCreateBody(
+        StageItemWithInputsCreate(
             stage_id=stage_id_1,
             name=DUMMY_STAGE_ITEM2.name,
             team_count=DUMMY_STAGE_ITEM2.team_count,
@@ -337,9 +352,9 @@ async def sql_create_dev_db() -> UserId:
             ],
         ),
     )
-    stage_item_3 = await sql_create_stage_item(
+    stage_item_3 = await sql_create_stage_item_with_inputs(
         tournament_id_1,
-        StageItemCreateBody(
+        StageItemWithInputsCreate(
             stage_id=stage_id_2,
             name=DUMMY_STAGE_ITEM3.name,
             team_count=DUMMY_STAGE_ITEM3.team_count,
@@ -384,14 +399,15 @@ async def sql_create_dev_db() -> UserId:
                         match=MatchBody.model_validate(
                             {
                                 **match.model_dump(),
-                                "team1_score": random.randint(0, 10),
-                                "team2_score": random.randint(0, 10),
+                                "stage_item_input1_score": random.randint(0, 10),
+                                "stage_item_input2_score": random.randint(0, 10),
                             }
                         ),
                         tournament=tournament_details,
                     )
 
-    for tournament in await database.fetch_all(tournaments.select()):
-        await recalculate_ranking_for_tournament_id(tournament.id)  # type: ignore[attr-defined]
+    for _stage_item in (stage_item_1, stage_item_2, stage_item_3):
+        stage_item_with_rounds = await get_stage_item(tournament_id_1, _stage_item.id)
+        await recalculate_ranking_for_stage_item(tournament_id_1, stage_item_with_rounds)
 
     return user_id_1

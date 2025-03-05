@@ -1,13 +1,17 @@
 import { showNotification } from '@mantine/notifications';
+import type Axios from 'axios';
 import { AxiosError, AxiosInstance, AxiosResponse } from 'axios';
 import { useRouter } from 'next/router';
 import useSWR, { SWRResponse } from 'swr';
 
 import { Pagination } from '../components/utils/util';
 import { SchedulerSettings } from '../interfaces/match';
+import { RoundInterface } from '../interfaces/round';
+import { TournamentFilter } from '../interfaces/tournament';
 import { getLogin, performLogout, tokenPresent } from './local_storage';
 
-const axios = require('axios').default;
+// TODO: This is a workaround for the fact that axios is not properly typed.
+const axios: typeof Axios = require('axios').default;
 
 export function handleRequestError(response: AxiosError) {
   if (response.code === 'ERR_NETWORK') {
@@ -111,8 +115,8 @@ export function getTournamentById(tournament_id: number): SWRResponse {
   return useSWR(`tournaments/${tournament_id}`, fetcher);
 }
 
-export function getTournaments(): SWRResponse {
-  return useSWR('tournaments', fetcher);
+export function getTournaments(filter: TournamentFilter): SWRResponse {
+  return useSWR(`tournaments?filter_=${filter}`, fetcher);
 }
 
 export function getPlayers(tournament_id: number, not_in_team: boolean = false): SWRResponse {
@@ -129,8 +133,11 @@ export function getPlayersPaginated(tournament_id: number, pagination: Paginatio
   );
 }
 
-export function getTeams(tournament_id: number): SWRResponse {
-  return useSWR(`tournaments/${tournament_id}/teams?limit=100`, fetcher);
+export function getTeams(tournament_id: number | null): SWRResponse {
+  return useSWR(
+    tournament_id == null ? null : `tournaments/${tournament_id}/teams?limit=100`,
+    fetcher
+  );
 }
 
 export function getTeamsPaginated(tournament_id: number, pagination: Pagination): SWRResponse {
@@ -140,38 +147,44 @@ export function getTeamsPaginated(tournament_id: number, pagination: Pagination)
   );
 }
 
-export function getTeamsLive(tournament_id: number): SWRResponse {
-  return useSWR(`tournaments/${tournament_id}/teams`, fetcher, {
+export function getTeamsLive(tournament_id: number | null): SWRResponse {
+  return useSWR(tournament_id == null ? null : `tournaments/${tournament_id}/teams`, fetcher, {
     refreshInterval: 5_000,
   });
 }
 
-export function getAvailableStageItemInputs(tournament_id: number, stage_id: number): SWRResponse {
-  return useSWR(`tournaments/${tournament_id}/stages/${stage_id}/available_inputs`, fetcher);
+export function getAvailableStageItemInputs(tournament_id: number): SWRResponse {
+  return useSWR(`tournaments/${tournament_id}/available_inputs`, fetcher);
 }
 
-export function getStages(tournament_id: number, no_draft_rounds: boolean = false): SWRResponse {
+export function getStages(
+  tournament_id: number | null,
+  no_draft_rounds: boolean = false
+): SWRResponse {
   return useSWR(
-    tournament_id === -1
+    tournament_id == null || tournament_id === -1
       ? null
       : `tournaments/${tournament_id}/stages?no_draft_rounds=${no_draft_rounds}`,
     fetcher
   );
 }
 
-export function getStagesLive(
-  tournament_id: number,
-  no_draft_rounds: boolean = false
-): SWRResponse {
+export function getStagesLive(tournament_id: number | null): SWRResponse {
   return useSWR(
-    tournament_id === -1
-      ? null
-      : `tournaments/${tournament_id}/stages?no_draft_rounds=${no_draft_rounds}`,
+    tournament_id == null ? null : `tournaments/${tournament_id}/stages?no_draft_rounds=true`,
     fetcherWithTimestamp,
     {
       refreshInterval: 5_000,
     }
   );
+}
+
+export function getRankings(tournament_id: number): SWRResponse {
+  return useSWR(`tournaments/${tournament_id}/rankings`, fetcher);
+}
+
+export function getRankingsPerStageItem(tournament_id: number): SWRResponse {
+  return useSWR(`tournaments/${tournament_id}/next_stage_rankings`, fetcher);
 }
 
 export function getCourts(tournament_id: number): SWRResponse {
@@ -190,26 +203,38 @@ export function getUser(): SWRResponse {
 
 export function getUpcomingMatches(
   tournament_id: number,
-  round_id: number,
+  stage_item_id: number,
+  draftRound: RoundInterface | null,
   schedulerSettings: SchedulerSettings
 ): SWRResponse {
   return useSWR(
-    round_id === -1
+    stage_item_id == null || draftRound == null
       ? null
-      : `tournaments/${tournament_id}/rounds/${round_id}/upcoming_matches?elo_diff_threshold=${schedulerSettings.eloThreshold}&only_recommended=${schedulerSettings.onlyRecommended}&limit=${schedulerSettings.limit}&iterations=${schedulerSettings.iterations}`,
+      : `tournaments/${tournament_id}/stage_items/${stage_item_id}/upcoming_matches?elo_diff_threshold=${schedulerSettings.eloThreshold}&only_recommended=${schedulerSettings.onlyRecommended}&limit=${schedulerSettings.limit}&iterations=${schedulerSettings.iterations}`,
     fetcher
   );
 }
 
-export async function uploadLogo(tournament_id: number, file: any) {
+export async function uploadTournamentLogo(tournament_id: number, file: any) {
   const bodyFormData = new FormData();
   bodyFormData.append('file', file, file.name);
 
   return createAxios().post(`tournaments/${tournament_id}/logo`, bodyFormData);
 }
 
-export async function removeLogo(tournament_id: number) {
+export async function removeTournamentLogo(tournament_id: number) {
   return createAxios().post(`tournaments/${tournament_id}/logo`);
+}
+
+export async function uploadTeamLogo(tournament_id: number, team_id: number, file: any) {
+  const bodyFormData = new FormData();
+  bodyFormData.append('file', file, file.name);
+
+  return createAxios().post(`tournaments/${tournament_id}/teams/${team_id}/logo`, bodyFormData);
+}
+
+export async function removeTeamLogo(tournament_id: number, team_id: number) {
+  return createAxios().post(`tournaments/${tournament_id}/teams/${team_id}/logo`);
 }
 
 export function checkForAuthError(response: any) {

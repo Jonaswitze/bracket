@@ -1,19 +1,20 @@
 import os
+from typing import Literal
 from uuid import uuid4
 
 import aiofiles.os
-import asyncpg  # type: ignore[import-untyped]
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
-from heliclockter import datetime_utc
 from starlette import status
 
 from bracket.database import database
 from bracket.logic.planning.matches import update_start_times_of_matches
 from bracket.logic.subscriptions import check_requirement
 from bracket.logic.tournaments import get_tournament_logo_path
+from bracket.models.db.ranking import RankingCreateBody
 from bracket.models.db.tournament import (
+    Tournament,
     TournamentBody,
-    TournamentToInsert,
+    TournamentChangeStatusBody,
     TournamentUpdateBody,
 )
 from bracket.models.db.user import UserPublic
@@ -24,13 +25,21 @@ from bracket.routes.auth import (
     user_authenticated_or_public_dashboard_by_endpoint_name,
 )
 from bracket.routes.models import SuccessResponse, TournamentResponse, TournamentsResponse
+from bracket.routes.util import disallow_archived_tournament
 from bracket.schema import tournaments
+from bracket.sql.rankings import (
+    get_all_rankings_in_tournament,
+    sql_create_ranking,
+    sql_delete_ranking,
+)
 from bracket.sql.tournaments import (
+    sql_create_tournament,
     sql_delete_tournament,
     sql_get_tournament,
     sql_get_tournament_by_endpoint_name,
     sql_get_tournaments,
     sql_update_tournament,
+    sql_update_tournament_status,
 )
 from bracket.sql.users import get_user_access_to_club, get_which_clubs_has_user_access_to
 from bracket.utils.errors import (
@@ -41,7 +50,6 @@ from bracket.utils.errors import (
 )
 from bracket.utils.id_types import TournamentId
 from bracket.utils.logging import logger
-from bracket.utils.types import assert_some
 
 router = APIRouter()
 unauthorized_exception = HTTPException(
@@ -66,6 +74,7 @@ async def get_tournament(
 @router.get("/tournaments", response_model=TournamentsResponse)
 async def get_tournaments(
     user: UserPublic | None = Depends(user_authenticated_or_public_dashboard_by_endpoint_name),
+    filter_: Literal["ALL", "OPEN", "ARCHIVED"] = "OPEN",
     endpoint_name: str | None = None,
 ) -> TournamentsResponse:
     match user, endpoint_name:
@@ -83,9 +92,9 @@ async def get_tournaments(
             return TournamentsResponse(data=[tournament])
 
         case _, _ if isinstance(user, UserPublic):
-            user_club_ids = await get_which_clubs_has_user_access_to(assert_some(user.id))
+            user_club_ids = await get_which_clubs_has_user_access_to(user.id)
             return TournamentsResponse(
-                data=await sql_get_tournaments(tuple(user_club_ids), endpoint_name)
+                data=await sql_get_tournaments(tuple(user_club_ids), endpoint_name, filter_)
             )
 
     raise RuntimeError()
@@ -96,11 +105,10 @@ async def update_tournament_by_id(
     tournament_id: TournamentId,
     tournament_body: TournamentUpdateBody,
     _: UserPublic = Depends(user_authenticated_for_tournament),
+    __: Tournament = Depends(disallow_archived_tournament),
 ) -> SuccessResponse:
-    try:
+    with check_unique_constraint_violation({UniqueIndex.ix_tournaments_dashboard_endpoint}):
         await sql_update_tournament(tournament_id, tournament_body)
-    except asyncpg.exceptions.UniqueViolationError as exc:
-        check_unique_constraint_violation(exc, {UniqueIndex.ix_tournaments_dashboard_endpoint})
 
     await update_start_times_of_matches(tournament_id)
     return SuccessResponse()
@@ -110,11 +118,41 @@ async def update_tournament_by_id(
 async def delete_tournament(
     tournament_id: TournamentId, _: UserPublic = Depends(user_authenticated_for_tournament)
 ) -> SuccessResponse:
-    try:
-        await sql_delete_tournament(tournament_id)
-    except asyncpg.exceptions.ForeignKeyViolationError as exc:
-        check_foreign_key_violation(exc, {ForeignKey.stages_tournament_id_fkey})
+    for ranking in await get_all_rankings_in_tournament(tournament_id):
+        await sql_delete_ranking(tournament_id, ranking.id)
 
+    with check_foreign_key_violation(
+        {
+            ForeignKey.stages_tournament_id_fkey,
+            ForeignKey.teams_tournament_id_fkey,
+            ForeignKey.players_tournament_id_fkey,
+            ForeignKey.courts_tournament_id_fkey,
+        }
+    ):
+        await sql_delete_tournament(tournament_id)
+
+    return SuccessResponse()
+
+
+@router.post("/tournaments/{tournament_id}/change-status", response_model=SuccessResponse)
+async def change_status(
+    tournament_id: TournamentId,
+    body: TournamentChangeStatusBody,
+    _: UserPublic = Depends(user_authenticated_for_tournament),
+) -> SuccessResponse:
+    """
+    Make a tournament archived or non-archived.
+    """
+
+    tournament = await sql_get_tournament(tournament_id)
+    if tournament.status == body.status:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tournament already has the requested status",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    await sql_update_tournament_status(tournament_id, body)
     return SuccessResponse()
 
 
@@ -125,9 +163,7 @@ async def create_tournament(
     existing_tournaments = await sql_get_tournaments((tournament_to_insert.club_id,))
     check_requirement(existing_tournaments, user, "max_tournaments")
 
-    has_access_to_club = await get_user_access_to_club(
-        tournament_to_insert.club_id, assert_some(user.id)
-    )
+    has_access_to_club = await get_user_access_to_club(tournament_to_insert.club_id, user.id)
     if not has_access_to_club:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -135,16 +171,12 @@ async def create_tournament(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    try:
-        await database.execute(
-            query=tournaments.insert(),
-            values=TournamentToInsert(
-                **tournament_to_insert.model_dump(),
-                created=datetime_utc.now(),
-            ).model_dump(),
-        )
-    except asyncpg.exceptions.UniqueViolationError as exc:
-        check_unique_constraint_violation(exc, {UniqueIndex.ix_tournaments_dashboard_endpoint})
+    async with database.transaction():
+        with check_unique_constraint_violation({UniqueIndex.ix_tournaments_dashboard_endpoint}):
+            tournament_id = await sql_create_tournament(tournament_to_insert)
+
+        ranking = RankingCreateBody()
+        await sql_create_ranking(tournament_id, ranking, position=0)
 
     return SuccessResponse()
 
@@ -154,6 +186,7 @@ async def upload_logo(
     tournament_id: TournamentId,
     file: UploadFile | None = None,
     _: UserPublic = Depends(user_authenticated_for_tournament),
+    __: Tournament = Depends(disallow_archived_tournament),
 ) -> TournamentResponse:
     old_logo_path = await get_tournament_logo_path(tournament_id)
     filename: str | None = None
@@ -165,9 +198,10 @@ async def upload_logo(
         assert extension in (".png", ".jpg", ".jpeg")
 
         filename = f"{uuid4()}{extension}"
-        new_logo_path = f"static/{filename}" if file is not None else None
+        new_logo_path = f"static/tournament-logos/{filename}" if file is not None else None
 
         if new_logo_path:
+            await aiofiles.os.makedirs("static/tournament-logos", exist_ok=True)
             async with aiofiles.open(new_logo_path, "wb") as f:
                 await f.write(await file.read())
 

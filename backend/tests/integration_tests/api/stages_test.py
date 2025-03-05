@@ -11,7 +11,6 @@ from bracket.utils.dummy_records import (
     DUMMY_TEAM1,
 )
 from bracket.utils.http import HTTPMethod
-from bracket.utils.types import assert_some
 from tests.integration_tests.api.shared import (
     SUCCESS_RESPONSE,
     send_request,
@@ -28,6 +27,7 @@ from tests.integration_tests.sql import (
 
 
 @pytest.mark.parametrize(("with_auth",), [(True,), (False,)])
+@pytest.mark.asyncio(loop_scope="session")
 async def test_stages_endpoint(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext, with_auth: bool
 ) -> None:
@@ -37,7 +37,9 @@ async def test_stages_endpoint(
             DUMMY_STAGE1.model_copy(update={"tournament_id": auth_context.tournament.id})
         ) as stage_inserted,
         inserted_stage_item(
-            DUMMY_STAGE_ITEM1.model_copy(update={"stage_id": stage_inserted.id})
+            DUMMY_STAGE_ITEM1.model_copy(
+                update={"stage_id": stage_inserted.id, "ranking_id": auth_context.ranking.id}
+            )
         ) as stage_item_inserted,
         inserted_round(
             DUMMY_ROUND1.model_copy(update={"stage_item_id": stage_item_inserted.id})
@@ -62,6 +64,7 @@ async def test_stages_endpoint(
                         {
                             "id": stage_item_inserted.id,
                             "stage_id": stage_inserted.id,
+                            "ranking_id": auth_context.ranking.id,
                             "name": "Group A",
                             "created": DUMMY_MOCK_TIME.isoformat().replace("+00:00", "Z"),
                             "type": "ROUND_ROBIN",
@@ -72,7 +75,6 @@ async def test_stages_endpoint(
                                     "stage_item_id": stage_item_inserted.id,
                                     "created": DUMMY_MOCK_TIME.isoformat().replace("+00:00", "Z"),
                                     "is_draft": False,
-                                    "is_active": False,
                                     "name": "Round 1",
                                     "matches": [],
                                 }
@@ -86,6 +88,7 @@ async def test_stages_endpoint(
         }
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_create_stage(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -105,6 +108,7 @@ async def test_create_stage(
         await assert_row_count_and_clear(stages, 1)
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_delete_stage(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -123,6 +127,7 @@ async def test_delete_stage(
         await assert_row_count_and_clear(stages, 0)
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_update_stage(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -132,7 +137,11 @@ async def test_update_stage(
         inserted_stage(
             DUMMY_STAGE1.model_copy(update={"tournament_id": auth_context.tournament.id})
         ) as stage_inserted,
-        inserted_stage_item(DUMMY_STAGE_ITEM1.model_copy(update={"stage_id": stage_inserted.id})),
+        inserted_stage_item(
+            DUMMY_STAGE_ITEM1.model_copy(
+                update={"stage_id": stage_inserted.id, "ranking_id": auth_context.ranking.id}
+            )
+        ),
     ):
         assert (
             await send_tournament_request(
@@ -140,7 +149,7 @@ async def test_update_stage(
             )
             == SUCCESS_RESPONSE
         )
-        [updated_stage] = await get_full_tournament_details(assert_some(auth_context.tournament.id))
+        [updated_stage] = await get_full_tournament_details(auth_context.tournament.id)
         assert len(updated_stage.stage_items) == 1
         assert updated_stage.name == body["name"]
 
@@ -148,6 +157,7 @@ async def test_update_stage(
         await assert_row_count_and_clear(stages, 1)
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_activate_stage(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -166,11 +176,28 @@ async def test_activate_stage(
             )
             == SUCCESS_RESPONSE
         )
-        [prev_stage, next_stage] = await get_full_tournament_details(
-            assert_some(auth_context.tournament.id)
-        )
-        assert prev_stage.is_active is False
-        assert next_stage.is_active is True
 
         await assert_row_count_and_clear(stage_items, 1)
         await assert_row_count_and_clear(stages, 1)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_get_next_stage_rankings(
+    startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
+) -> None:
+    async with (
+        inserted_team(DUMMY_TEAM1.model_copy(update={"tournament_id": auth_context.tournament.id})),
+        inserted_stage(
+            DUMMY_STAGE1.model_copy(update={"tournament_id": auth_context.tournament.id})
+        ) as stage_inserted,
+        inserted_stage_item(
+            DUMMY_STAGE_ITEM1.model_copy(
+                update={"stage_id": stage_inserted.id, "ranking_id": auth_context.ranking.id}
+            )
+        ),
+    ):
+        response = await send_tournament_request(
+            HTTPMethod.GET, "next_stage_rankings", auth_context
+        )
+
+    assert response == {"data": {}}

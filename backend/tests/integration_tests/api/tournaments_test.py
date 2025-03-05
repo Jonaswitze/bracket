@@ -1,10 +1,13 @@
 import aiofiles
+import aiofiles.os
 import aiohttp
+import pytest
 
 from bracket.database import database
-from bracket.models.db.tournament import Tournament
+from bracket.logic.tournaments import sql_delete_tournament_completely
+from bracket.models.db.tournament import Tournament, TournamentStatus
 from bracket.schema import tournaments
-from bracket.sql.tournaments import sql_delete_tournament
+from bracket.sql.tournaments import sql_delete_tournament, sql_get_tournament_by_endpoint_name
 from bracket.utils.db import fetch_one_parsed_certain
 from bracket.utils.dummy_records import DUMMY_MOCK_TIME, DUMMY_TOURNAMENT
 from bracket.utils.http import HTTPMethod
@@ -18,6 +21,7 @@ from tests.integration_tests.models import AuthContext
 from tests.integration_tests.sql import inserted_tournament
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_tournaments_endpoint(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -31,16 +35,18 @@ async def test_tournaments_endpoint(
                 "name": "Some Cool Tournament",
                 "logo_path": None,
                 "dashboard_public": True,
-                "dashboard_endpoint": None,
+                "dashboard_endpoint": "endpoint-test",
                 "players_can_be_in_multiple_teams": True,
                 "auto_assign_courts": True,
                 "duration_minutes": 10,
                 "margin_minutes": 5,
+                "status": "OPEN",
             }
         ],
     }
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_tournament_endpoint(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -55,23 +61,27 @@ async def test_tournament_endpoint(
             "logo_path": None,
             "name": "Some Cool Tournament",
             "dashboard_public": True,
-            "dashboard_endpoint": None,
+            "dashboard_endpoint": "endpoint-test",
             "players_can_be_in_multiple_teams": True,
             "auto_assign_courts": True,
             "duration_minutes": 10,
             "margin_minutes": 5,
+            "status": "OPEN",
         },
     }
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_create_tournament(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
+    dashboard_endpoint = "some-new-endpoint"
     body = {
         "name": "Some new name",
         "start_time": DUMMY_MOCK_TIME.isoformat().replace("+00:00", "Z"),
         "club_id": auth_context.club.id,
-        "dashboard_public": False,
+        "dashboard_public": True,
+        "dashboard_endpoint": dashboard_endpoint,
         "players_can_be_in_multiple_teams": True,
         "auto_assign_courts": True,
         "duration_minutes": 12,
@@ -81,9 +91,33 @@ async def test_create_tournament(
         await send_auth_request(HTTPMethod.POST, "tournaments", auth_context, json=body)
         == SUCCESS_RESPONSE
     )
-    await database.execute(tournaments.delete().where(tournaments.c.name == body["name"]))
+
+    # Cleanup
+    tournament = assert_some(await sql_get_tournament_by_endpoint_name(dashboard_endpoint))
+    await sql_delete_tournament_completely(tournament.id)
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_create_tournament_duplicate_dashboard_endpoint(
+    startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
+) -> None:
+    body = {
+        "name": "Some new name",
+        "start_time": DUMMY_MOCK_TIME.isoformat().replace("+00:00", "Z"),
+        "club_id": auth_context.club.id,
+        "dashboard_public": True,
+        "dashboard_endpoint": "endpoint-test",
+        "players_can_be_in_multiple_teams": True,
+        "auto_assign_courts": True,
+        "duration_minutes": 12,
+        "margin_minutes": 3,
+    }
+    assert await send_auth_request(HTTPMethod.POST, "tournaments", auth_context, json=body) == {
+        "detail": "This dashboard link is already taken"
+    }
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_update_tournament(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -109,6 +143,37 @@ async def test_update_tournament(
     assert updated_tournament.dashboard_public == body["dashboard_public"]
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_archive_and_unarchive_tournament(
+    startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
+) -> None:
+    query = tournaments.select().where(tournaments.c.id == auth_context.tournament.id)
+    body = {"status": "ARCHIVED"}
+    assert (
+        await send_tournament_request(HTTPMethod.POST, "change-status", auth_context, json=body)
+        == SUCCESS_RESPONSE
+    )
+    updated_tournament = await fetch_one_parsed_certain(database, Tournament, query)
+    assert updated_tournament.status is TournamentStatus.ARCHIVED
+    assert updated_tournament.dashboard_public is False
+
+    # Archiving twice is not allowed
+    assert await send_tournament_request(
+        HTTPMethod.POST, "change-status", auth_context, json=body
+    ) == {"detail": "Tournament already has the requested status"}
+
+    # Unarchive the tournament
+    body = {"status": "OPEN"}
+    assert (
+        await send_tournament_request(HTTPMethod.POST, "change-status", auth_context, json=body)
+        == SUCCESS_RESPONSE
+    )
+    updated_tournament = await fetch_one_parsed_certain(database, Tournament, query)
+    assert updated_tournament.status is TournamentStatus.OPEN
+    assert updated_tournament.dashboard_public is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_delete_tournament(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -126,9 +191,10 @@ async def test_delete_tournament(
             == SUCCESS_RESPONSE
         )
 
-    await sql_delete_tournament(assert_some(tournament_inserted.id))
+    await sql_delete_tournament(tournament_inserted.id)
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_tournament_upload_and_remove_logo(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -148,12 +214,14 @@ async def test_tournament_upload_and_remove_logo(
         body=data,
     )
 
-    assert response["data"]["logo_path"], f"Response: {response}"
-    assert await aiofiles.os.path.exists(f"static/{response['data']['logo_path']}")
+    assert response.get("data", {}).get("logo_path"), f"Response: {response}"
+    assert await aiofiles.os.path.exists(f"static/tournament-logos/{response['data']['logo_path']}")
 
     response = await send_tournament_request(
         method=HTTPMethod.POST, endpoint="logo", auth_context=auth_context, body=aiohttp.FormData()
     )
 
     assert response["data"]["logo_path"] is None, f"Response: {response}"
-    assert not await aiofiles.os.path.exists(f"static/{response['data']['logo_path']}")
+    assert not await aiofiles.os.path.exists(
+        f"static/tournament-logos/{response['data']['logo_path']}"
+    )

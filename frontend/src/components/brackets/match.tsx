@@ -1,15 +1,17 @@
 import { Center, Grid, UnstyledButton, useMantineTheme } from '@mantine/core';
+import { useColorScheme } from '@mantine/hooks';
 import assert from 'assert';
+import { useTranslation } from 'next-i18next';
 import React, { useState } from 'react';
 import { SWRResponse } from 'swr';
 
-import { BracketDisplaySettings } from '../../interfaces/brackets';
 import {
   MatchInterface,
-  formatMatchTeam1,
-  formatMatchTeam2,
+  formatMatchInput1,
+  formatMatchInput2,
   isMatchHappening,
 } from '../../interfaces/match';
+import { RoundInterface } from '../../interfaces/round';
 import { TournamentMinimal } from '../../interfaces/tournament';
 import { getMatchLookup, getStageItemLookup } from '../../services/lookups';
 import MatchModal from '../modals/match_modal';
@@ -18,7 +20,7 @@ import classes from './match.module.css';
 
 export function MatchBadge({ match, theme }: { match: MatchInterface; theme: any }) {
   const visibility = match.court ? 'visible' : 'hidden';
-  const badgeColor = theme.colorScheme === 'dark' ? theme.colors.blue[7] : theme.colors.blue[7];
+  const badgeColor = useColorScheme() ? theme.colors.blue[7] : theme.colors.blue[7];
   return (
     <Center style={{ transform: 'translateY(0%)', visibility }}>
       <div
@@ -46,48 +48,32 @@ export default function Match({
   tournamentData,
   match,
   readOnly,
-  dynamicSchedule,
-  displaySettings,
+  round,
 }: {
   swrStagesResponse: SWRResponse;
   swrUpcomingMatchesResponse: SWRResponse | null;
   tournamentData: TournamentMinimal;
   match: MatchInterface;
   readOnly: boolean;
-  dynamicSchedule: boolean;
-  displaySettings?: BracketDisplaySettings | null;
+
+  round: RoundInterface;
 }) {
-  // const { classes } = useStyles();
+  const { t } = useTranslation();
   const theme = useMantineTheme();
   const winner_style = {
-    // backgroundColor: theme.colorScheme === 'dark' ? theme.colors.green[9] : theme.colors.green[4],
     backgroundColor: theme.colors.green[9],
   };
-  const showTeamMemberNames =
-    displaySettings != null && displaySettings.teamNamesDisplay === 'player-names';
 
   const stageItemsLookup = getStageItemLookup(swrStagesResponse);
   const matchesLookup = getMatchLookup(swrStagesResponse);
 
-  const team1_style = match.team1_score > match.team2_score ? winner_style : {};
-  const team2_style = match.team1_score < match.team2_score ? winner_style : {};
+  const team1_style =
+    match.stage_item_input1_score > match.stage_item_input2_score ? winner_style : {};
+  const team2_style =
+    match.stage_item_input1_score < match.stage_item_input2_score ? winner_style : {};
 
-  const team1_players = match.team1
-    ? match.team1.players.map((player) => player.name).join(', ')
-    : '';
-  const team2_players = match.team2
-    ? match.team2.players.map((player) => player.name).join(', ')
-    : '';
-
-  const team1_players_label = team1_players === '' ? 'No players' : team1_players;
-  const team2_players_label = team2_players === '' ? 'No players' : team2_players;
-
-  const team1_label = showTeamMemberNames
-    ? team1_players_label
-    : formatMatchTeam1(stageItemsLookup, matchesLookup, match);
-  const team2_label = showTeamMemberNames
-    ? team2_players_label
-    : formatMatchTeam2(stageItemsLookup, matchesLookup, match);
+  const team1_label = formatMatchInput1(t, stageItemsLookup, matchesLookup, match);
+  const team2_label = formatMatchInput2(t, stageItemsLookup, matchesLookup, match);
 
   const [opened, setOpened] = useState(false);
 
@@ -97,14 +83,14 @@ export default function Match({
       <div className={classes.top} style={team1_style}>
         <Grid grow>
           <Grid.Col span={10}>{team1_label}</Grid.Col>
-          <Grid.Col span={2}>{match.team1_score}</Grid.Col>
+          <Grid.Col span={2}>{match.stage_item_input1_score}</Grid.Col>
         </Grid>
       </div>
       <div className={classes.divider} />
       <div className={classes.bottom} style={team2_style}>
         <Grid grow>
           <Grid.Col span={10}>{team2_label}</Grid.Col>
-          <Grid.Col span={2}>{match.team2_score}</Grid.Col>
+          <Grid.Col span={2}>{match.stage_item_input2_score}</Grid.Col>
         </Grid>
       </div>
     </>
@@ -127,7 +113,7 @@ export default function Match({
         match={match}
         opened={opened}
         setOpened={setOpened}
-        dynamicSchedule={dynamicSchedule}
+        round={round}
       />
     </>
   );

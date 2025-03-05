@@ -5,7 +5,6 @@ from bracket.models.db.util import StageItemWithRounds
 from bracket.sql.matches import sql_create_match
 from bracket.sql.tournaments import sql_get_tournament
 from bracket.utils.id_types import TournamentId
-from bracket.utils.types import assert_some
 
 
 def get_round_robin_combinations(team_count: int) -> list[list[tuple[int, int]]]:
@@ -39,24 +38,23 @@ def get_round_robin_combinations(team_count: int) -> list[list[tuple[int, int]]]
 async def build_round_robin_stage_item(
     tournament_id: TournamentId, stage_item: StageItemWithRounds
 ) -> None:
-    matches = get_round_robin_combinations(len(stage_item.inputs))
+    matches = get_round_robin_combinations(stage_item.team_count)
     tournament = await sql_get_tournament(tournament_id)
 
     for i, round_ in enumerate(stage_item.rounds):
         for team_1_id, team_2_id in matches[i]:
-            if team_1_id < len(stage_item.inputs) and team_2_id < len(stage_item.inputs):
-                team_1, team_2 = stage_item.inputs[team_1_id], stage_item.inputs[team_2_id]
+            if team_1_id < stage_item.team_count and team_2_id < stage_item.team_count:
+                stage_item_1, stage_item_2 = (
+                    stage_item.inputs[team_1_id],
+                    stage_item.inputs[team_2_id],
+                )
 
                 match = MatchCreateBody(
-                    round_id=assert_some(round_.id),
-                    team1_id=team_1.team_id,
-                    team1_winner_from_stage_item_id=team_1.winner_from_stage_item_id,
-                    team1_winner_position=team_1.winner_position,
-                    team1_winner_from_match_id=team_1.winner_from_match_id,
-                    team2_id=team_2.team_id,
-                    team2_winner_from_stage_item_id=team_2.winner_from_stage_item_id,
-                    team2_winner_position=team_2.winner_position,
-                    team2_winner_from_match_id=team_2.winner_from_match_id,
+                    round_id=round_.id,
+                    stage_item_input1_id=stage_item_1.id,
+                    stage_item_input1_winner_from_match_id=None,
+                    stage_item_input2_id=stage_item_2.id,
+                    stage_item_input2_winner_from_match_id=None,
                     court_id=None,
                     duration_minutes=tournament.duration_minutes,
                     margin_minutes=tournament.margin_minutes,

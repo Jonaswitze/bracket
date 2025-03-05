@@ -1,11 +1,13 @@
+import pytest
+
 from bracket.logic.scheduling.builder import build_matches_for_stage_item
-from bracket.models.db.stage_item import StageItemCreateBody
+from bracket.models.db.stage_item import StageItemWithInputsCreate
 from bracket.models.db.stage_item_inputs import (
     StageItemInputCreateBodyFinal,
     StageItemInputCreateBodyTentative,
 )
 from bracket.sql.shared import sql_delete_stage_item_with_foreign_keys
-from bracket.sql.stage_items import sql_create_stage_item
+from bracket.sql.stage_items import sql_create_stage_item_with_inputs
 from bracket.sql.stages import get_full_tournament_details
 from bracket.utils.dummy_records import (
     DUMMY_COURT1,
@@ -15,7 +17,6 @@ from bracket.utils.dummy_records import (
     DUMMY_TEAM1,
 )
 from bracket.utils.http import HTTPMethod
-from bracket.utils.types import assert_some
 from tests.integration_tests.api.shared import (
     SUCCESS_RESPONSE,
     send_tournament_request,
@@ -28,6 +29,7 @@ from tests.integration_tests.sql import (
 )
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_schedule_all_matches(
     startup_and_shutdown_uvicorn_server: None, auth_context: AuthContext
 ) -> None:
@@ -51,38 +53,38 @@ async def test_schedule_all_matches(
             DUMMY_TEAM1.model_copy(update={"tournament_id": auth_context.tournament.id})
         ) as team_inserted_4,
     ):
-        tournament_id = assert_some(auth_context.tournament.id)
-        stage_item_1 = await sql_create_stage_item(
+        tournament_id = auth_context.tournament.id
+        stage_item_1 = await sql_create_stage_item_with_inputs(
             tournament_id,
-            StageItemCreateBody(
-                stage_id=assert_some(stage_inserted_1.id),
+            StageItemWithInputsCreate(
+                stage_id=stage_inserted_1.id,
                 name=DUMMY_STAGE_ITEM1.name,
                 team_count=DUMMY_STAGE_ITEM1.team_count,
                 type=DUMMY_STAGE_ITEM1.type,
                 inputs=[
                     StageItemInputCreateBodyFinal(
                         slot=1,
-                        team_id=assert_some(team_inserted_1.id),
+                        team_id=team_inserted_1.id,
                     ),
                     StageItemInputCreateBodyFinal(
                         slot=2,
-                        team_id=assert_some(team_inserted_2.id),
+                        team_id=team_inserted_2.id,
                     ),
                     StageItemInputCreateBodyFinal(
                         slot=3,
-                        team_id=assert_some(team_inserted_3.id),
+                        team_id=team_inserted_3.id,
                     ),
                     StageItemInputCreateBodyFinal(
                         slot=4,
-                        team_id=assert_some(team_inserted_4.id),
+                        team_id=team_inserted_4.id,
                     ),
                 ],
             ),
         )
-        stage_item_2 = await sql_create_stage_item(
+        stage_item_2 = await sql_create_stage_item_with_inputs(
             tournament_id,
-            StageItemCreateBody(
-                stage_id=assert_some(stage_inserted_1.id),
+            StageItemWithInputsCreate(
+                stage_id=stage_inserted_1.id,
                 name=DUMMY_STAGE_ITEM3.name,
                 team_count=2,
                 type=DUMMY_STAGE_ITEM3.type,

@@ -12,7 +12,12 @@ filterwarnings = [
     'ignore:.*:pytest.PytestDeprecationWarning',
     'ignore:.*pytest-asyncio detected an unclosed event loop.*:DeprecationWarning',
     'ignore:.*The event_loop fixture provided by pytest-asyncio has been redefined.*:DeprecationWarning',
+    'ignore:.*Please use `import python_multipart` instead.*:PendingDeprecationWarning',
 ]
+# Enable these once `asyncio_default_test_loop_scope` has been released
+# Then remove the `@pytest.mark.asyncio(loop_scope="session")` calls.
+#asyncio_default_fixture_loop_scope = "session"
+#asyncio_default_test_loop_scope = "session"
 
 [tool.mypy]
     junit_xml = '.junit_report.xml'
@@ -54,6 +59,7 @@ disable = [
     'broad-except',
     'broad-exception-raised',
     'consider-iterating-dictionary',
+    'contextmanager-generator-missing-cleanup',  # Gives false positives.
     'dangerous-default-value',
     'duplicate-code',
     'fixme',
@@ -67,6 +73,7 @@ disable = [
     'too-many-arguments',
     'too-many-locals',
     'too-many-nested-blocks',
+    'too-many-positional-arguments',
     'unspecified-encoding',
     'unused-argument',  # Gives false positives.
     'wrong-import-position',
@@ -109,17 +116,18 @@ select = [
     "UP",
     "W",
 ]
-ignore = ["FIX002", "TD002", "TD003", "TCH001", "TCH002", "TCH003", "ISC001"]
+ignore = ["FIX002", "TD002", "TD003", "TC001", "TC002", "TC003", "ISC001"]
 
 [tool.vulture]
 min_confidence = 0
 paths = ["."]
 ignore_decorators = ["@pytest.*", "@*router*", "@app.*", "@*validator*"]
 ignore_names = [
-    "todo*",
     "RestartableUvicornWorker",
     "_generate_next_value_",
     "downgrade",
-    "upgrade"
+    "startup_and_shutdown_uvicorn_server",
+    "todo*",
+    "upgrade",
 ]
 sort_by_size = true
